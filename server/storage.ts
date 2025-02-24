@@ -2,8 +2,17 @@ import { IStorage } from "./interfaces";
 import { User, Organization, CommuteLog, Listing, InsertUser } from "@shared/schema";
 import createMemoryStore from "memorystore";
 import session from "express-session";
+import { scrypt, randomBytes } from "crypto";
+import { promisify } from "util";
 
 const MemoryStore = createMemoryStore(session);
+const scryptAsync = promisify(scrypt);
+
+async function hashPassword(password: string) {
+  const salt = randomBytes(16).toString("hex");
+  const buf = (await scryptAsync(password, salt, 64)) as Buffer;
+  return `${buf.toString("hex")}.${salt}`;
+}
 
 export class MemStorage implements IStorage {
   private users: Map<number, User>;
@@ -28,14 +37,19 @@ export class MemStorage implements IStorage {
       checkPeriod: 86400000,
     });
 
-    // Create initial system admin
-    this.createUser({
+    // Create initial system admin with hashed password
+    this.createInitialAdmin();
+  }
+
+  private async createInitialAdmin() {
+    const adminUser = {
       username: "admin",
-      password: "admin123", // This would be hashed in the auth layer
+      password: await hashPassword("admin123"),
       name: "System Admin",
-      role: "system_admin",
-      status: "approved",
-    });
+      role: "system_admin" as const,
+      status: "approved" as const,
+    };
+    this.createUser(adminUser);
   }
 
   // User methods
