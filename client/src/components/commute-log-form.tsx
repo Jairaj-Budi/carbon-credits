@@ -9,10 +9,12 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { format } from "date-fns";
-import { CalendarIcon } from "lucide-react";
+import { CalendarIcon, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useToast } from "@/hooks/use-toast";
 
 export function CommuteLogForm() {
+  const { toast } = useToast();
   const form = useForm({
     resolver: zodResolver(insertCommuteLogSchema),
     defaultValues: {
@@ -29,6 +31,17 @@ export function CommuteLogForm() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/commute-logs"] });
       form.reset();
+      toast({
+        title: "Success",
+        description: "Commute logged successfully",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
     },
   });
 
@@ -89,7 +102,7 @@ export function CommuteLogForm() {
                 >
                   {transportationMethods.map((method) => (
                     <option key={method.value} value={method.value}>
-                      {method.label}
+                      {method.label} ({method.multiplier}x points)
                     </option>
                   ))}
                 </select>
@@ -100,6 +113,7 @@ export function CommuteLogForm() {
         />
 
         <Button type="submit" className="w-full" disabled={createLogMutation.isPending}>
+          {createLogMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
           Log Commute
         </Button>
       </form>

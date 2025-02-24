@@ -1,4 +1,3 @@
-// Updates to handle string decimal values
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -9,6 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { formatNumber, formatCurrency } from "@/lib/utils";
 import { Organization, Listing } from "@shared/schema";
+import { Loader2 } from "lucide-react";
 
 type MarketplaceProps = {
   organization?: Organization;
@@ -37,6 +37,13 @@ export function Marketplace({ organization }: MarketplaceProps) {
         description: "Listing created successfully",
       });
     },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
   });
 
   const purchaseMutation = useMutation({
@@ -52,6 +59,13 @@ export function Marketplace({ organization }: MarketplaceProps) {
         description: "Purchase completed successfully",
       });
     },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
   });
 
   return (
@@ -64,6 +78,14 @@ export function Marketplace({ organization }: MarketplaceProps) {
           <form 
             onSubmit={(e) => {
               e.preventDefault();
+              if (!creditsAmount || !pricePerCredit) {
+                toast({
+                  title: "Error",
+                  description: "Please fill in all fields",
+                  variant: "destructive",
+                });
+                return;
+              }
               createListingMutation.mutate({
                 creditsAmount: Number(creditsAmount),
                 pricePerCredit: Number(pricePerCredit),
@@ -81,6 +103,7 @@ export function Marketplace({ organization }: MarketplaceProps) {
                 min="0"
                 max={organization?.totalCredits}
                 step="0.01"
+                placeholder="Enter amount of credits to sell"
               />
             </div>
             <div className="space-y-2">
@@ -92,13 +115,20 @@ export function Marketplace({ organization }: MarketplaceProps) {
                 onChange={(e) => setPricePerCredit(e.target.value)}
                 min="0"
                 step="0.01"
+                placeholder="Enter price per credit"
               />
             </div>
             <Button 
               type="submit" 
               className="w-full"
-              disabled={createListingMutation.isPending || !creditsAmount || !pricePerCredit}
+              disabled={
+                createListingMutation.isPending ||
+                !creditsAmount ||
+                !pricePerCredit ||
+                Number(creditsAmount) > (organization?.totalCredits ? parseFloat(organization.totalCredits) : 0)
+              }
             >
+              {createListingMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Create Listing
             </Button>
           </form>
@@ -139,11 +169,17 @@ export function Marketplace({ organization }: MarketplaceProps) {
                       (organization?.virtualBalance ? parseFloat(organization.virtualBalance) : 0) < totalCost
                     }
                   >
+                    {purchaseMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                     {listing.organizationId === organization?.id ? "Your Listing" : "Purchase"}
                   </Button>
                 </div>
               );
             })}
+            {!listings?.length && (
+              <p className="text-center text-muted-foreground">
+                No active listings available
+              </p>
+            )}
           </div>
         </CardContent>
       </Card>
