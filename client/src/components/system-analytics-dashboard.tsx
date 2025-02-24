@@ -63,18 +63,18 @@ export function SystemAnalyticsDashboard() {
   const userGrowth = Object.entries(analytics.userGrowth).map(([date, count]) => ({
     date,
     users: count
-  }));
+  })).sort((a, b) => a.date.localeCompare(b.date));
 
   const orgGrowth = Object.entries(analytics.organizationGrowth).map(([date, count]) => ({
     date,
     organizations: count
-  }));
+  })).sort((a, b) => a.date.localeCompare(b.date));
 
   const tradingActivity = Object.entries(analytics.tradingActivity).map(([date, data]) => ({
     date,
     credits: data.credits,
     volume: data.volume
-  }));
+  })).sort((a, b) => a.date.localeCompare(b.date));
 
   const userDistribution = [
     { name: "Employees", value: analytics.userDistribution.employees },
