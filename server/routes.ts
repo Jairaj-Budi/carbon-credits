@@ -9,9 +9,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Organizations
   app.post("/api/organizations", async (req, res) => {
+    if (!req.user || req.user.role !== "org_admin") {
+      return res.status(403).send("Unauthorized");
+    }
     const orgData = insertOrgSchema.parse(req.body);
     const org = await storage.createOrganization(orgData);
+
+    // Update the user with the new organization
+    await storage.updateUser(req.user.id, {
+      organizationId: org.id,
+      status: "approved", // Auto-approve org admin
+    });
+
     res.status(201).json(org);
+  });
+
+  app.get("/api/organizations/:id", async (req, res) => {
+    if (!req.user) return res.status(401).send("Unauthorized");
+    const org = await storage.getOrganization(parseInt(req.params.id));
+    if (!org) return res.status(404).send("Organization not found");
+    res.json(org);
   });
 
   app.get("/api/organizations/pending", async (req, res) => {
@@ -53,10 +70,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json(user);
   });
 
+  app.patch("/api/users/:id/commute-distance", async (req, res) => {
+    if (!req.user || req.user.id !== parseInt(req.params.id)) {
+      return res.status(403).send("Unauthorized");
+    }
+    const user = await storage.updateUser(req.user.id, {
+      commuteDistance: req.body.commuteDistance?.toString(),
+    });
+    res.json(user);
+  });
+
   // Commute Logs
   app.post("/api/commute-logs", async (req, res) => {
     if (!req.user || req.user.role !== "employee") {
       return res.status(403).send("Unauthorized");
+    }
+
+    if (!req.user.commuteDistance) {
+      return res.status(400).send("Please set your commute distance first");
+    }
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const existingLog = (await storage.getUserCommuteLogs(req.user.id))
+      .find(log => {
+        const logDate = new Date(log.date);
+        logDate.setHours(0, 0, 0, 0);
+        return logDate.getTime() === today.getTime();
+      });
+
+    if (existingLog) {
+      return res.status(400).send("You've already logged your commute for today");
     }
 
     const logData = insertCommuteLogSchema.parse({
@@ -64,16 +108,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       userId: req.user.id,
     });
 
-    // Calculate points based on method and distance
+    const userDistance = req.user.commuteDistance ? parseFloat(req.user.commuteDistance) : 0;
+    const roundTripDistance = userDistance * 2;
     const pointsMultiplier = {
       drove_alone: 0,
       public_transport: 1,
       carpool: 1.5,
       work_from_home: 2,
     };
-
-    const userDistance = req.user.commuteDistance ? parseFloat(req.user.commuteDistance) : 0;
-    const roundTripDistance = userDistance * 2;
     const pointsEarned = roundTripDistance * pointsMultiplier[logData.method];
 
     const log = await storage.createCommuteLog({

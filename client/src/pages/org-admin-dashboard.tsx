@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Marketplace } from "@/components/marketplace";
+import { OrganizationRegistration } from "@/components/organization-registration";
 import { formatNumber, formatCurrency } from "@/lib/utils";
 import { Organization, User } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -37,8 +38,12 @@ export default function OrgAdminDashboard() {
     },
   });
 
+  if (!user) return null;
+
   return (
     <div className="min-h-screen bg-background">
+      <OrganizationRegistration user={user} />
+
       <div className="border-b">
         <div className="container flex h-16 items-center justify-between">
           <h1 className="text-lg font-semibold">Organization Admin Dashboard</h1>

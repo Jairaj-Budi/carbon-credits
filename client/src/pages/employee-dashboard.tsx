@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CommuteLogForm } from "@/components/commute-log-form";
+import { CommuteDistanceModal } from "@/components/commute-distance-modal";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { formatNumber } from "@/lib/utils";
 import { transportationMethods } from "@/lib/utils";
@@ -17,8 +18,12 @@ export default function EmployeeDashboard() {
 
   const totalPoints = logs?.reduce((sum, log) => sum + parseFloat(log.pointsEarned), 0) || 0;
 
+  if (!user) return null;
+
   return (
     <div className="min-h-screen bg-background">
+      <CommuteDistanceModal user={user} />
+
       <div className="border-b">
         <div className="container flex h-16 items-center justify-between">
           <h1 className="text-lg font-semibold">Employee Dashboard</h1>
