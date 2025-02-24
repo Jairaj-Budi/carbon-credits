@@ -6,11 +6,33 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Marketplace } from "@/components/marketplace";
 import { OrganizationRegistration } from "@/components/organization-registration";
+import { AnalyticsDashboard } from "@/components/analytics-dashboard";
 import { formatNumber, formatCurrency } from "@/lib/utils";
 import { Organization, User } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
+
+type OrgAnalytics = {
+  organizationName: string;
+  totalPoints: number;
+  totalCredits: number;
+  virtualBalance: number;
+  employeeCount: number;
+  employeeStats: {
+    userId: number;
+    name: string;
+    totalPoints: number;
+    logCount: number;
+  }[];
+};
+
+type MarketplaceHistory = {
+  sold: any[];
+  active: any[];
+  totalSoldCredits: number;
+  totalSoldValue: number;
+};
 
 export default function OrgAdminDashboard() {
   const { user, logoutMutation } = useAuth();
@@ -18,6 +40,16 @@ export default function OrgAdminDashboard() {
 
   const { data: organization } = useQuery<Organization>({
     queryKey: ["/api/organizations", user?.organizationId],
+  });
+
+  const { data: analytics, isLoading: isLoadingAnalytics } = useQuery<OrgAnalytics>({
+    queryKey: ["/api/organizations", user?.organizationId, "analytics"],
+    enabled: !!user?.organizationId,
+  });
+
+  const { data: marketHistory, isLoading: isLoadingHistory } = useQuery<MarketplaceHistory>({
+    queryKey: ["/api/marketplace/history"],
+    enabled: !!user?.organizationId,
   });
 
   const { data: pendingEmployees } = useQuery<User[]>({
@@ -54,15 +86,16 @@ export default function OrgAdminDashboard() {
       </div>
 
       <main className="container py-6">
+        {/* Summary Cards */}
         <div className="grid gap-6 mb-6">
-          <div className="grid gap-4 md:grid-cols-3">
+          <div className="grid gap-4 md:grid-cols-4">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Total Credits</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">
-                  {formatNumber(organization?.totalCredits ? parseFloat(organization.totalCredits) : 0)}
+                  {formatNumber(analytics?.totalCredits ?? 0)}
                 </div>
               </CardContent>
             </Card>
@@ -72,26 +105,44 @@ export default function OrgAdminDashboard() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">
-                  {formatCurrency(organization?.virtualBalance ? parseFloat(organization.virtualBalance) : 0)}
+                  {formatCurrency(analytics?.virtualBalance ?? 0)}
                 </div>
               </CardContent>
             </Card>
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Pending Approvals</CardTitle>
+                <CardTitle className="text-sm font-medium">Total Sold Credits</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{pendingEmployees?.length || 0}</div>
+                <div className="text-2xl font-bold">
+                  {formatNumber(marketHistory?.totalSoldCredits ?? 0)}
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">
+                  {formatCurrency(marketHistory?.totalSoldValue ?? 0)}
+                </div>
               </CardContent>
             </Card>
           </div>
         </div>
 
-        <Tabs defaultValue="marketplace" className="space-y-4">
+        {/* Main Content Tabs */}
+        <Tabs defaultValue="dashboard" className="space-y-4">
           <TabsList>
+            <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
             <TabsTrigger value="marketplace">Marketplace</TabsTrigger>
             <TabsTrigger value="employees">Employees</TabsTrigger>
           </TabsList>
+
+          <TabsContent value="dashboard">
+            <AnalyticsDashboard />
+          </TabsContent>
 
           <TabsContent value="marketplace" className="space-y-4">
             <Marketplace organization={organization} />

@@ -140,6 +140,7 @@ export class MemStorage implements IStorage {
     const newListing = { 
       id, 
       status: "active",
+      createdAt: new Date().toISOString(),
       ...listing,
       creditsAmount: listing.creditsAmount?.toString() ?? "0",
       pricePerCredit: listing.pricePerCredit?.toString() ?? "0",

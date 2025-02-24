@@ -36,6 +36,7 @@ export const listings = pgTable("listings", {
   creditsAmount: decimal("credits_amount", { precision: 10, scale: 2 }).notNull(),
   pricePerCredit: decimal("price_per_credit", { precision: 10, scale: 2 }).notNull(),
   status: text("status", { enum: ["active", "sold"] }).notNull().default("active"),
+  createdAt: timestamp("created_at").notNull(),
 });
 
 export const insertUserSchema = createInsertSchema(users)
@@ -52,7 +53,7 @@ export const insertCommuteLogSchema = createInsertSchema(commuteLogs)
   .omit({ id: true, pointsEarned: true });
 
 export const insertListingSchema = createInsertSchema(listings)
-  .omit({ id: true, status: true });
+  .omit({ id: true, status: true, createdAt: true });
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;

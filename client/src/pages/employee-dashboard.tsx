@@ -7,16 +7,24 @@ import { CommuteDistanceModal } from "@/components/commute-distance-modal";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { formatNumber } from "@/lib/utils";
 import { transportationMethods } from "@/lib/utils";
-import { User, CommuteLog } from "@shared/schema";
+import { CommuteLog } from "@shared/schema";
 import { format } from "date-fns";
+import { Loader2 } from "lucide-react";
+
+type CommuteAnalytics = {
+  logs: CommuteLog[];
+  analytics: {
+    totalPoints: number;
+    methodBreakdown: Record<string, number>;
+    dailyAverage: number;
+  };
+};
 
 export default function EmployeeDashboard() {
   const { user, logoutMutation } = useAuth();
-  const { data: logs } = useQuery<CommuteLog[]>({ 
-    queryKey: ["/api/commute-logs"]
+  const { data: commuteData, isLoading } = useQuery<CommuteAnalytics>({ 
+    queryKey: ["/api/commute-logs/analytics"]
   });
-
-  const totalPoints = logs?.reduce((sum, log) => sum + parseFloat(log.pointsEarned), 0) || 0;
 
   if (!user) return null;
 
@@ -40,18 +48,38 @@ export default function EmployeeDashboard() {
               <CardTitle>My Stats</CardTitle>
             </CardHeader>
             <CardContent>
-              <dl className="grid grid-cols-2 gap-4">
-                <div>
-                  <dt className="text-sm font-medium text-muted-foreground">Total Points</dt>
-                  <dd className="text-2xl font-bold">{formatNumber(totalPoints)}</dd>
+              {isLoading ? (
+                <div className="flex justify-center">
+                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
                 </div>
-                <div>
-                  <dt className="text-sm font-medium text-muted-foreground">Commute Distance</dt>
-                  <dd className="text-2xl font-bold">
-                    {formatNumber(user?.commuteDistance ? parseFloat(user.commuteDistance) : 0)} mi
-                  </dd>
-                </div>
-              </dl>
+              ) : (
+                <dl className="grid grid-cols-2 gap-4">
+                  <div>
+                    <dt className="text-sm font-medium text-muted-foreground">Total Points</dt>
+                    <dd className="text-2xl font-bold">
+                      {formatNumber(commuteData?.analytics.totalPoints ?? 0)}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-sm font-medium text-muted-foreground">Daily Average</dt>
+                    <dd className="text-2xl font-bold">
+                      {formatNumber(commuteData?.analytics.dailyAverage ?? 0)}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-sm font-medium text-muted-foreground">Commute Distance</dt>
+                    <dd className="text-2xl font-bold">
+                      {formatNumber(user?.commuteDistance ? parseFloat(user.commuteDistance) : 0)} mi
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-sm font-medium text-muted-foreground">Total Commutes</dt>
+                    <dd className="text-2xl font-bold">
+                      {commuteData?.logs.length ?? 0}
+                    </dd>
+                  </div>
+                </dl>
+              )}
             </CardContent>
           </Card>
 
@@ -70,26 +98,37 @@ export default function EmployeeDashboard() {
             <CardTitle>Recent Commute Logs</CardTitle>
           </CardHeader>
           <CardContent>
-            <ScrollArea className="h-[400px]">
-              <div className="space-y-4">
-                {logs?.map((log) => {
-                  const method = transportationMethods.find(m => m.value === log.method);
-                  return (
-                    <div key={log.id} className="flex justify-between items-center p-3 border rounded-lg">
-                      <div>
-                        <p className="font-medium">{method?.label}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {format(new Date(log.date), "PPP")}
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <p className="font-medium">{formatNumber(parseFloat(log.pointsEarned))} pts</p>
-                      </div>
-                    </div>
-                  );
-                })}
+            {isLoading ? (
+              <div className="flex justify-center p-8">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
               </div>
-            </ScrollArea>
+            ) : (
+              <ScrollArea className="h-[400px]">
+                <div className="space-y-4">
+                  {commuteData?.logs.map((log) => {
+                    const method = transportationMethods.find(m => m.value === log.method);
+                    return (
+                      <div key={log.id} className="flex justify-between items-center p-3 border rounded-lg">
+                        <div>
+                          <p className="font-medium">{method?.label}</p>
+                          <p className="text-sm text-muted-foreground">
+                            {format(new Date(log.date), "PPP")}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="font-medium">{formatNumber(parseFloat(log.pointsEarned))} pts</p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {!commuteData?.logs.length && (
+                    <p className="text-center text-muted-foreground">
+                      No commute logs yet
+                    </p>
+                  )}
+                </div>
+              </ScrollArea>
+            )}
           </CardContent>
         </Card>
       </main>

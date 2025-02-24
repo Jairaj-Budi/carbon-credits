@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 import { setupAuth } from "./auth";
 import { storage } from "./storage";
 import { insertOrgSchema, insertCommuteLogSchema, insertListingSchema } from "@shared/schema";
+import { calculateCommutePoints } from "@shared/utils";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   setupAuth(app);
@@ -106,17 +107,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const logData = insertCommuteLogSchema.parse({
       ...req.body,
       userId: req.user.id,
+      date: new Date(),
     });
 
     const userDistance = req.user.commuteDistance ? parseFloat(req.user.commuteDistance) : 0;
-    const roundTripDistance = userDistance * 2;
-    const pointsMultiplier = {
-      drove_alone: 0,
-      public_transport: 1,
-      carpool: 1.5,
-      work_from_home: 2,
-    };
-    const pointsEarned = roundTripDistance * pointsMultiplier[logData.method];
+    const pointsEarned = calculateCommutePoints(userDistance, logData.method);
 
     const log = await storage.createCommuteLog({
       ...logData,
@@ -211,6 +206,210 @@ export async function registerRoutes(app: Express): Promise<Server> {
     await storage.updateListing(listing.id, { status: "sold" });
 
     res.json({ message: "Purchase successful" });
+  });
+
+  // Get commute logs with analytics
+  app.get("/api/commute-logs/analytics", async (req, res) => {
+    if (!req.user) return res.status(401).send("Unauthorized");
+
+    const logs = await storage.getUserCommuteLogs(req.user.id);
+    const analytics = {
+      totalPoints: logs.reduce((sum, log) => sum + parseFloat(log.pointsEarned), 0),
+      methodBreakdown: logs.reduce((acc, log) => {
+        acc[log.method] = (acc[log.method] || 0) + 1;
+        return acc;
+      }, {} as Record<string, number>),
+      dailyAverage: logs.length ? (logs.reduce((sum, log) => sum + parseFloat(log.pointsEarned), 0) / logs.length) : 0
+    };
+
+    res.json({
+      logs,
+      analytics
+    });
+  });
+
+  // Get organization analytics
+  app.get("/api/organizations/:id/analytics", async (req, res) => {
+    if (!req.user) return res.status(401).send("Unauthorized");
+
+    const org = await storage.getOrganization(parseInt(req.params.id));
+    if (!org) return res.status(404).send("Organization not found");
+
+    const users = Array.from((await storage.getAllUsers()).values())
+      .filter(u => u.organizationId === org.id);
+
+    const allLogs = await Promise.all(
+      users.map(user => storage.getUserCommuteLogs(user.id))
+    );
+
+    const flatLogs = allLogs.flat();
+    const totalPoints = flatLogs.reduce((sum, log) => sum + parseFloat(log.pointsEarned), 0);
+    const employeeStats = users.map(user => {
+      const userLogs = flatLogs.filter(log => log.userId === user.id);
+      return {
+        userId: user.id,
+        name: user.name,
+        totalPoints: userLogs.reduce((sum, log) => sum + parseFloat(log.pointsEarned), 0),
+        logCount: userLogs.length
+      };
+    });
+
+    res.json({
+      organizationName: org.name,
+      totalPoints,
+      totalCredits: parseFloat(org.totalCredits),
+      virtualBalance: parseFloat(org.virtualBalance),
+      employeeCount: users.length,
+      employeeStats
+    });
+  });
+
+  // Get marketplace history
+  app.get("/api/marketplace/history", async (req, res) => {
+    if (!req.user || !req.user.organizationId) {
+      return res.status(403).send("Unauthorized");
+    }
+
+    const listings = await storage.getActiveListings();
+    const orgListings = listings.filter(
+      listing => listing.organizationId === req.user!.organizationId
+    );
+
+    const soldListings = orgListings.filter(listing => listing.status === "sold");
+    const activeListings = orgListings.filter(listing => listing.status === "active");
+
+    res.json({
+      sold: soldListings,
+      active: activeListings,
+      totalSoldCredits: soldListings.reduce((sum, listing) => sum + parseFloat(listing.creditsAmount), 0),
+      totalSoldValue: soldListings.reduce(
+        (sum, listing) => sum + (parseFloat(listing.creditsAmount) * parseFloat(listing.pricePerCredit)), 
+        0
+      )
+    });
+  });
+
+  // Add analytics endpoints
+  app.get("/api/analytics/organization-summary", async (req, res) => {
+    if (!req.user || req.user.role !== "org_admin") {
+      return res.status(403).send("Unauthorized");
+    }
+
+    const org = await storage.getOrganization(req.user.organizationId!);
+    if (!org) return res.status(404).send("Organization not found");
+
+    const users = Array.from((await storage.getAllUsers()).values())
+      .filter(u => u.organizationId === org.id);
+
+    const allLogs = await Promise.all(
+      users.map(user => storage.getUserCommuteLogs(user.id))
+    );
+
+    const flatLogs = allLogs.flat();
+
+    // Method distribution
+    const methodDistribution = flatLogs.reduce((acc, log) => {
+      acc[log.method] = (acc[log.method] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+
+    // Daily points trend (last 30 days)
+    const now = new Date();
+    const thirtyDaysAgo = new Date(now.setDate(now.getDate() - 30));
+
+    const dailyTrend = flatLogs
+      .filter(log => new Date(log.date) >= thirtyDaysAgo)
+      .reduce((acc, log) => {
+        const date = new Date(log.date).toISOString().split('T')[0];
+        acc[date] = (acc[date] || 0) + parseFloat(log.pointsEarned);
+        return acc;
+      }, {} as Record<string, number>);
+
+    // Employee performance ranking
+    const employeePerformance = users.map(user => {
+      const userLogs = flatLogs.filter(log => log.userId === user.id);
+      return {
+        userId: user.id,
+        name: user.name,
+        totalPoints: userLogs.reduce((sum, log) => sum + parseFloat(log.pointsEarned), 0),
+        commutesLogged: userLogs.length,
+        averagePoints: userLogs.length ? 
+          userLogs.reduce((sum, log) => sum + parseFloat(log.pointsEarned), 0) / userLogs.length : 0
+      };
+    }).sort((a, b) => b.totalPoints - a.totalPoints);
+
+    res.json({
+      methodDistribution,
+      dailyTrend,
+      employeePerformance,
+      summary: {
+        totalEmployees: users.length,
+        totalPoints: flatLogs.reduce((sum, log) => sum + parseFloat(log.pointsEarned), 0),
+        averagePointsPerEmployee: employeePerformance.reduce((sum, emp) => sum + emp.averagePoints, 0) / users.length,
+        totalCommutes: flatLogs.length
+      }
+    });
+  });
+
+  // Add marketplace analytics endpoint
+  app.get("/api/analytics/marketplace", async (req, res) => {
+    if (!req.user || req.user.role !== "org_admin") {
+      return res.status(403).send("Unauthorized");
+    }
+
+    const listings = await storage.getActiveListings();
+
+    // Filter listings for the organization
+    const orgListings = listings.filter(
+      listing => listing.organizationId === req.user!.organizationId
+    );
+
+    const soldListings = orgListings.filter(listing => listing.status === "sold");
+    const activeListings = orgListings.filter(listing => listing.status === "active");
+
+    // Calculate trends
+    const salesTrend = soldListings.reduce((acc, listing) => {
+      const month = new Date(listing.createdAt).toISOString().slice(0, 7); // YYYY-MM
+      const amount = parseFloat(listing.creditsAmount);
+      const value = amount * parseFloat(listing.pricePerCredit);
+
+      acc[month] = acc[month] || { credits: 0, value: 0 };
+      acc[month].credits += amount;
+      acc[month].value += value;
+
+      return acc;
+    }, {} as Record<string, { credits: number; value: number }>);
+
+    // Calculate price trends
+    const priceAnalysis = soldListings.reduce((acc, listing) => {
+      const price = parseFloat(listing.pricePerCredit);
+      if (!acc.min || price < acc.min) acc.min = price;
+      if (!acc.max || price > acc.max) acc.max = price;
+      acc.total += price;
+      acc.count++;
+      return acc;
+    }, { min: 0, max: 0, total: 0, count: 0 });
+
+    res.json({
+      currentListings: {
+        active: activeListings.length,
+        totalCredits: activeListings.reduce((sum, l) => sum + parseFloat(l.creditsAmount), 0),
+        averagePrice: activeListings.length ? 
+          activeListings.reduce((sum, l) => sum + parseFloat(l.pricePerCredit), 0) / activeListings.length : 0
+      },
+      salesHistory: {
+        totalSales: soldListings.length,
+        totalCredits: soldListings.reduce((sum, l) => sum + parseFloat(l.creditsAmount), 0),
+        totalValue: soldListings.reduce((sum, l) => 
+          sum + (parseFloat(l.creditsAmount) * parseFloat(l.pricePerCredit)), 0),
+        averagePrice: priceAnalysis.count ? priceAnalysis.total / priceAnalysis.count : 0,
+        minPrice: priceAnalysis.min,
+        maxPrice: priceAnalysis.max
+      },
+      trends: {
+        sales: salesTrend
+      }
+    });
   });
 
   const httpServer = createServer(app);

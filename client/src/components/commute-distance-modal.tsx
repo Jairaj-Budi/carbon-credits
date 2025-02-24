@@ -10,9 +10,15 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { User } from "@shared/schema";
+import { validateCommuteDistance } from "@/lib/utils";
 
 const schema = z.object({
-  commuteDistance: z.number().min(0, "Distance must be positive"),
+  commuteDistance: z.number()
+    .min(0, "Distance must be positive")
+    .refine(
+      (val) => !validateCommuteDistance(val),
+      (val) => ({ message: validateCommuteDistance(val) || "Invalid distance" })
+    ),
 });
 
 type CommuteDistanceModalProps = {
