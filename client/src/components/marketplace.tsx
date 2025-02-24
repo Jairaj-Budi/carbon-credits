@@ -1,3 +1,4 @@
+// Updates to handle string decimal values
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -78,7 +79,7 @@ export function Marketplace({ organization }: MarketplaceProps) {
                 value={creditsAmount}
                 onChange={(e) => setCreditsAmount(e.target.value)}
                 min="0"
-                max={organization?.totalCredits?.toString()}
+                max={organization?.totalCredits}
                 step="0.01"
               />
             </div>
@@ -110,33 +111,39 @@ export function Marketplace({ organization }: MarketplaceProps) {
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {listings?.filter(l => l.status === "active").map((listing) => (
-              <div key={listing.id} className="p-4 border rounded-lg space-y-2">
-                <div className="flex justify-between">
-                  <span className="font-medium">Credits:</span>
-                  <span>{formatNumber(listing.creditsAmount)}</span>
+            {listings?.filter(l => l.status === "active").map((listing) => {
+              const listingAmount = parseFloat(listing.creditsAmount);
+              const listingPrice = parseFloat(listing.pricePerCredit);
+              const totalCost = listingAmount * listingPrice;
+
+              return (
+                <div key={listing.id} className="p-4 border rounded-lg space-y-2">
+                  <div className="flex justify-between">
+                    <span className="font-medium">Credits:</span>
+                    <span>{formatNumber(listingAmount)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="font-medium">Price per Credit:</span>
+                    <span>{formatCurrency(listingPrice)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="font-medium">Total Cost:</span>
+                    <span>{formatCurrency(totalCost)}</span>
+                  </div>
+                  <Button
+                    className="w-full"
+                    onClick={() => purchaseMutation.mutate(listing.id)}
+                    disabled={
+                      purchaseMutation.isPending ||
+                      listing.organizationId === organization?.id ||
+                      (organization?.virtualBalance ? parseFloat(organization.virtualBalance) : 0) < totalCost
+                    }
+                  >
+                    {listing.organizationId === organization?.id ? "Your Listing" : "Purchase"}
+                  </Button>
                 </div>
-                <div className="flex justify-between">
-                  <span className="font-medium">Price per Credit:</span>
-                  <span>{formatCurrency(listing.pricePerCredit)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="font-medium">Total Cost:</span>
-                  <span>{formatCurrency(listing.creditsAmount * listing.pricePerCredit)}</span>
-                </div>
-                <Button
-                  className="w-full"
-                  onClick={() => purchaseMutation.mutate(listing.id)}
-                  disabled={
-                    purchaseMutation.isPending ||
-                    listing.organizationId === organization?.id ||
-                    (organization?.virtualBalance || 0) < (listing.creditsAmount * listing.pricePerCredit)
-                  }
-                >
-                  {listing.organizationId === organization?.id ? "Your Listing" : "Purchase"}
-                </Button>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </CardContent>
       </Card>

@@ -40,7 +40,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     if (!req.user || req.user.role !== "employee") {
       return res.status(403).send("Unauthorized");
     }
-    
+
     const logData = insertCommuteLogSchema.parse({
       ...req.body,
       userId: req.user.id,
@@ -54,7 +54,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       work_from_home: 2,
     };
 
-    const roundTripDistance = (req.user.commuteDistance || 0) * 2;
+    const userDistance = req.user.commuteDistance ? parseFloat(req.user.commuteDistance) : 0;
+    const roundTripDistance = userDistance * 2;
     const pointsEarned = roundTripDistance * pointsMultiplier[logData.method];
 
     const log = await storage.createCommuteLog({
@@ -66,8 +67,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     if (req.user.organizationId) {
       const org = await storage.getOrganization(req.user.organizationId);
       if (org) {
+        const newTotal = (parseFloat(org.totalCredits) + pointsEarned).toString();
         await storage.updateOrganization(org.id, {
-          totalCredits: org.totalCredits + pointsEarned,
+          totalCredits: newTotal,
         });
       }
     }
@@ -86,17 +88,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     if (!req.user || req.user.role !== "org_admin") {
       return res.status(403).send("Unauthorized");
     }
-    
+
     const listingData = insertListingSchema.parse({
       ...req.body,
       organizationId: req.user.organizationId,
     });
-    
+
     const org = await storage.getOrganization(req.user.organizationId!);
-    if (!org || org.totalCredits < listingData.creditsAmount) {
+    if (!org || parseFloat(org.totalCredits) < listingData.creditsAmount) {
       return res.status(400).send("Insufficient credits");
     }
-    
+
     const listing = await storage.createListing(listingData);
     res.status(201).json(listing);
   });
@@ -112,7 +114,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(403).send("Unauthorized");
     }
 
-    const listing = await storage.listings.get(parseInt(req.params.id));
+    const listing = await storage.getListing(parseInt(req.params.id));
     if (!listing || listing.status !== "active") {
       return res.status(404).send("Listing not found");
     }
@@ -124,21 +126,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(400).send("Invalid organization");
     }
 
-    const totalCost = listing.creditsAmount * listing.pricePerCredit;
-    if (buyerOrg.virtualBalance < totalCost) {
+    const totalCost = parseFloat(listing.creditsAmount) * parseFloat(listing.pricePerCredit);
+    if (parseFloat(buyerOrg.virtualBalance) < totalCost) {
       return res.status(400).send("Insufficient funds");
     }
 
     // Update buyer
     await storage.updateOrganization(buyerOrg.id, {
-      virtualBalance: buyerOrg.virtualBalance - totalCost,
-      totalCredits: buyerOrg.totalCredits + listing.creditsAmount,
+      virtualBalance: (parseFloat(buyerOrg.virtualBalance) - totalCost).toString(),
+      totalCredits: (parseFloat(buyerOrg.totalCredits) + parseFloat(listing.creditsAmount)).toString(),
     });
 
     // Update seller
     await storage.updateOrganization(sellerOrg.id, {
-      virtualBalance: sellerOrg.virtualBalance + totalCost,
-      totalCredits: sellerOrg.totalCredits - listing.creditsAmount,
+      virtualBalance: (parseFloat(sellerOrg.virtualBalance) + totalCost).toString(),
+      totalCredits: (parseFloat(sellerOrg.totalCredits) - parseFloat(listing.creditsAmount)).toString(),
     });
 
     // Mark listing as sold

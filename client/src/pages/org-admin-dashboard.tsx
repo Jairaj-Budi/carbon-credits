@@ -37,7 +37,9 @@ export default function OrgAdminDashboard() {
                 <CardTitle className="text-sm font-medium">Total Credits</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{formatNumber(organization?.totalCredits || 0)}</div>
+                <div className="text-2xl font-bold">
+                  {formatNumber(organization?.totalCredits ? parseFloat(organization.totalCredits) : 0)}
+                </div>
               </CardContent>
             </Card>
             <Card>
@@ -45,7 +47,9 @@ export default function OrgAdminDashboard() {
                 <CardTitle className="text-sm font-medium">Virtual Balance</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{formatCurrency(organization?.virtualBalance || 0)}</div>
+                <div className="text-2xl font-bold">
+                  {formatCurrency(organization?.virtualBalance ? parseFloat(organization.virtualBalance) : 0)}
+                </div>
               </CardContent>
             </Card>
             <Card>

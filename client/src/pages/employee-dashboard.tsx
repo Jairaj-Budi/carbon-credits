@@ -15,7 +15,7 @@ export default function EmployeeDashboard() {
     queryKey: ["/api/commute-logs"]
   });
 
-  const totalPoints = logs?.reduce((sum, log) => sum + Number(log.pointsEarned), 0) || 0;
+  const totalPoints = logs?.reduce((sum, log) => sum + parseFloat(log.pointsEarned), 0) || 0;
 
   return (
     <div className="min-h-screen bg-background">
@@ -42,7 +42,9 @@ export default function EmployeeDashboard() {
                 </div>
                 <div>
                   <dt className="text-sm font-medium text-muted-foreground">Commute Distance</dt>
-                  <dd className="text-2xl font-bold">{formatNumber(user?.commuteDistance || 0)} mi</dd>
+                  <dd className="text-2xl font-bold">
+                    {formatNumber(user?.commuteDistance ? parseFloat(user.commuteDistance) : 0)} mi
+                  </dd>
                 </div>
               </dl>
             </CardContent>
@@ -76,7 +78,7 @@ export default function EmployeeDashboard() {
                         </p>
                       </div>
                       <div className="text-right">
-                        <p className="font-medium">{formatNumber(log.pointsEarned)} pts</p>
+                        <p className="font-medium">{formatNumber(parseFloat(log.pointsEarned))} pts</p>
                       </div>
                     </div>
                   );

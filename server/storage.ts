@@ -51,7 +51,11 @@ export class MemStorage implements IStorage {
 
   async createUser(user: InsertUser): Promise<User> {
     const id = this.currentIds.users++;
-    const newUser = { ...user, id } as User;
+    const newUser = { 
+      ...user, 
+      id,
+      commuteDistance: user.commuteDistance ? user.commuteDistance.toString() : null,
+    } as User;
     this.users.set(id, newUser);
     return newUser;
   }
@@ -73,8 +77,8 @@ export class MemStorage implements IStorage {
     const id = this.currentIds.organizations++;
     const newOrg = {
       id,
-      virtualBalance: 1000,
-      totalCredits: 0,
+      virtualBalance: "1000",
+      totalCredits: "0",
       status: "pending",
       ...org,
     } as Organization;
@@ -93,7 +97,11 @@ export class MemStorage implements IStorage {
   // Commute log methods
   async createCommuteLog(log: Partial<CommuteLog>): Promise<CommuteLog> {
     const id = this.currentIds.commuteLogs++;
-    const newLog = { id, ...log } as CommuteLog;
+    const newLog = { 
+      id, 
+      ...log,
+      pointsEarned: log.pointsEarned?.toString() ?? "0",
+    } as CommuteLog;
     this.commuteLogs.set(id, newLog);
     return newLog;
   }
@@ -107,7 +115,13 @@ export class MemStorage implements IStorage {
   // Listing methods
   async createListing(listing: Partial<Listing>): Promise<Listing> {
     const id = this.currentIds.listings++;
-    const newListing = { id, status: "active", ...listing } as Listing;
+    const newListing = { 
+      id, 
+      status: "active",
+      ...listing,
+      creditsAmount: listing.creditsAmount?.toString() ?? "0",
+      pricePerCredit: listing.pricePerCredit?.toString() ?? "0",
+    } as Listing;
     this.listings.set(id, newListing);
     return newListing;
   }
@@ -124,6 +138,10 @@ export class MemStorage implements IStorage {
     const updatedListing = { ...listing, ...updates };
     this.listings.set(id, updatedListing);
     return updatedListing;
+  }
+
+  getListing(id: number): Promise<Listing | undefined> {
+    return Promise.resolve(this.listings.get(id));
   }
 }
 
