@@ -11,15 +11,19 @@ export const users = pgTable("users", {
   organizationId: integer("organization_id"),
   commuteDistance: decimal("commute_distance", { precision: 10, scale: 2 }),
   status: text("status", { enum: ["pending", "approved"] }).notNull().default("pending"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
 export const organizations = pgTable("organizations", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
+  description: text("description"),
   address: text("address").notNull(),
   virtualBalance: decimal("virtual_balance", { precision: 10, scale: 2 }).notNull().default("1000"),
   totalCredits: decimal("total_credits", { precision: 10, scale: 2 }).notNull().default("0"),
-  status: text("status", { enum: ["pending", "approved"] }).notNull().default("pending"),
+  status: text("status", { enum: ["pending", "approved", "rejected"] }).notNull().default("pending"),
+  rejectionReason: text("rejection_reason"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
 export const commuteLogs = pgTable("commute_logs", {
@@ -36,24 +40,31 @@ export const listings = pgTable("listings", {
   creditsAmount: decimal("credits_amount", { precision: 10, scale: 2 }).notNull(),
   pricePerCredit: decimal("price_per_credit", { precision: 10, scale: 2 }).notNull(),
   status: text("status", { enum: ["active", "sold"] }).notNull().default("active"),
-  createdAt: timestamp("created_at").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
 export const insertUserSchema = createInsertSchema(users)
-  .omit({ id: true })
+  .omit({ id: true, createdAt: true })
   .extend({
     password: z.string().min(6),
     commuteDistance: z.number().optional(),
   });
 
 export const insertOrgSchema = createInsertSchema(organizations)
-  .omit({ id: true, virtualBalance: true, totalCredits: true });
+  .omit({ id: true, virtualBalance: true, totalCredits: true, createdAt: true })
+  .extend({
+    description: z.string().optional(),
+  });
 
 export const insertCommuteLogSchema = createInsertSchema(commuteLogs)
   .omit({ id: true, pointsEarned: true });
 
 export const insertListingSchema = createInsertSchema(listings)
-  .omit({ id: true, status: true, createdAt: true });
+  .omit({ id: true, status: true, createdAt: true })
+  .extend({
+    creditsAmount: z.number().positive(),
+    pricePerCredit: z.number().positive(),
+  });
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;

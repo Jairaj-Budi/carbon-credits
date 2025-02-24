@@ -39,3 +39,16 @@ export function formatPercentage(value: number): string {
     maximumFractionDigits: 1
   }).format(value);
 }
+
+export function validateCommuteDistance(distance: number): { isValid: boolean; error?: string } {
+  if (typeof distance !== 'number') {
+    return { isValid: false, error: 'Distance must be a number' };
+  }
+  if (distance <= 0) {
+    return { isValid: false, error: 'Distance must be greater than 0' };
+  }
+  if (distance > 200) {
+    return { isValid: false, error: 'Distance cannot exceed 200 kilometers' };
+  }
+  return { isValid: true };
+}

@@ -51,6 +51,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json(org);
   });
 
+  // Add organization rejection endpoint
+  app.patch("/api/organizations/:id/reject", async (req, res) => {
+    if (!req.user || req.user.role !== "system_admin") {
+      return res.status(403).send("Unauthorized");
+    }
+
+    const org = await storage.updateOrganization(parseInt(req.params.id), {
+      status: "rejected",
+      rejectionReason: req.body.reason
+    });
+
+    res.json(org);
+  });
+
+
   // Users
   app.get("/api/users/pending", async (req, res) => {
     if (!req.user || req.user.role !== "org_admin") {
@@ -408,6 +423,77 @@ export async function registerRoutes(app: Express): Promise<Server> {
       },
       trends: {
         sales: salesTrend
+      }
+    });
+  });
+
+  // Add at the end of the file, before the httpServer creation
+  app.get("/api/analytics/system", async (req, res) => {
+    if (!req.user || req.user.role !== "system_admin") {
+      return res.status(403).send("Unauthorized");
+    }
+
+    const users = Array.from((await storage.getAllUsers()).values());
+    const organizations = Array.from((await storage.getAllOrganizations()).values());
+    const listings = await storage.getActiveListings();
+
+    // Calculate user growth (last 6 months)
+    const userGrowth = users.reduce((acc, user) => {
+      const month = new Date(user.createdAt).toISOString().slice(0, 7);
+      acc[month] = (acc[month] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+
+    // Calculate organization growth
+    const organizationGrowth = organizations.reduce((acc, org) => {
+      const month = new Date(org.createdAt).toISOString().slice(0, 7);
+      acc[month] = (acc[month] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+
+    // Calculate trading activity
+    const soldListings = listings.filter(listing => listing.status === "sold");
+    const tradingActivity = soldListings.reduce((acc, listing) => {
+      const month = new Date(listing.createdAt).toISOString().slice(0, 7);
+      const credits = parseFloat(listing.creditsAmount);
+      const volume = credits * parseFloat(listing.pricePerCredit);
+
+      acc[month] = acc[month] || { credits: 0, volume: 0 };
+      acc[month].credits += credits;
+      acc[month].volume += volume;
+
+      return acc;
+    }, {} as Record<string, { credits: number; volume: number }>);
+
+    // Get all commute logs
+    const allLogs = await Promise.all(
+      users.map(user => storage.getUserCommuteLogs(user.id))
+    );
+    const flatLogs = allLogs.flat();
+
+    // Calculate platform statistics
+    const totalCommutes = flatLogs.length;
+    const totalPoints = flatLogs.reduce((sum, log) => sum + parseFloat(log.pointsEarned), 0);
+
+    res.json({
+      totalOrganizations: organizations.length,
+      totalUsers: users.length,
+      totalCreditsTraded: soldListings.reduce((sum, l) => sum + parseFloat(l.creditsAmount), 0),
+      totalTradingVolume: soldListings.reduce((sum, l) => 
+        sum + (parseFloat(l.creditsAmount) * parseFloat(l.pricePerCredit)), 0),
+      userGrowth,
+      organizationGrowth,
+      tradingActivity,
+      userDistribution: {
+        employees: users.filter(u => u.role === "employee").length,
+        orgAdmins: users.filter(u => u.role === "org_admin").length,
+        systemAdmins: users.filter(u => u.role === "system_admin").length
+      },
+      platformStats: {
+        totalCommutes,
+        avgPointsPerCommute: totalCommutes ? totalPoints / totalCommutes : 0,
+        activeListings: listings.filter(l => l.status === "active").length,
+        completedTrades: soldListings.length
       }
     });
   });
