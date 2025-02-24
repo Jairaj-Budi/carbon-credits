@@ -9,9 +9,11 @@ export interface IStorage {
   getUserByUsername(username: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
   updateUser(id: number, updates: Partial<User>): Promise<User>;
+  getAllUsers(): Promise<Map<number, User>>;
 
   // Organization methods
   getOrganization(id: number): Promise<Organization | undefined>;
+  getAllOrganizations(): Promise<Map<number, Organization>>;
   createOrganization(org: Partial<Organization>): Promise<Organization>;
   updateOrganization(id: number, updates: Partial<Organization>): Promise<Organization>;
 
@@ -22,5 +24,6 @@ export interface IStorage {
   // Listing methods
   createListing(listing: Partial<Listing>): Promise<Listing>;
   getActiveListings(): Promise<Listing[]>;
+  getListing(id: number): Promise<Listing | undefined>;
   updateListing(id: number, updates: Partial<Listing>): Promise<Listing>;
 }

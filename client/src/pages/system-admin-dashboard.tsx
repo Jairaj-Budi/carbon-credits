@@ -1,14 +1,33 @@
 import { useAuth } from "@/hooks/use-auth";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Organization } from "@shared/schema";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import { Loader2 } from "lucide-react";
 
 export default function SystemAdminDashboard() {
   const { logoutMutation } = useAuth();
+  const { toast } = useToast();
+
   const { data: pendingOrganizations } = useQuery<Organization[]>({
-    queryKey: ["/api/organizations", "pending"],
+    queryKey: ["/api/organizations/pending"],
+  });
+
+  const approveOrgMutation = useMutation({
+    mutationFn: async (orgId: number) => {
+      const res = await apiRequest("PATCH", `/api/organizations/${orgId}/approve`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/organizations/pending"] });
+      toast({
+        title: "Success",
+        description: "Organization approved successfully",
+      });
+    },
   });
 
   return (
@@ -37,14 +56,21 @@ export default function SystemAdminDashboard() {
                       <p className="text-sm text-muted-foreground">{org.address}</p>
                     </div>
                     <Button 
-                      onClick={() => {
-                        // Implement approval mutation
-                      }}
+                      onClick={() => approveOrgMutation.mutate(org.id)}
+                      disabled={approveOrgMutation.isPending}
                     >
+                      {approveOrgMutation.isPending && (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      )}
                       Approve
                     </Button>
                   </div>
                 ))}
+                {!pendingOrganizations?.length && (
+                  <p className="text-center text-muted-foreground">
+                    No pending organizations
+                  </p>
+                )}
               </div>
             </ScrollArea>
           </CardContent>

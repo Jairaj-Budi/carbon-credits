@@ -14,6 +14,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.status(201).json(org);
   });
 
+  app.get("/api/organizations/pending", async (req, res) => {
+    if (!req.user || req.user.role !== "system_admin") {
+      return res.status(403).send("Unauthorized");
+    }
+    const orgs = Array.from((await storage.getAllOrganizations()).values())
+      .filter(org => org.status === "pending");
+    res.json(orgs);
+  });
+
   app.patch("/api/organizations/:id/approve", async (req, res) => {
     if (!req.user || req.user.role !== "system_admin") {
       return res.status(403).send("Unauthorized");
@@ -25,6 +34,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Users
+  app.get("/api/users/pending", async (req, res) => {
+    if (!req.user || req.user.role !== "org_admin") {
+      return res.status(403).send("Unauthorized");
+    }
+    const users = Array.from((await storage.getAllUsers()).values())
+      .filter(user => user.status === "pending" && user.organizationId === req.user.organizationId);
+    res.json(users);
+  });
+
   app.patch("/api/users/:id/approve", async (req, res) => {
     if (!req.user || req.user.role !== "org_admin") {
       return res.status(403).send("Unauthorized");
@@ -60,7 +78,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     const log = await storage.createCommuteLog({
       ...logData,
-      pointsEarned,
+      pointsEarned: pointsEarned.toString(),
     });
 
     // Update organization's total credits
@@ -99,7 +117,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(400).send("Insufficient credits");
     }
 
-    const listing = await storage.createListing(listingData);
+    const listing = await storage.createListing({
+      ...listingData,
+      creditsAmount: listingData.creditsAmount.toString(),
+      pricePerCredit: listingData.pricePerCredit.toString(),
+    });
     res.status(201).json(listing);
   });
 

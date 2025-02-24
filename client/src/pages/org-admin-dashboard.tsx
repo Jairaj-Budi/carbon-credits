@@ -1,5 +1,5 @@
 import { useAuth } from "@/hooks/use-auth";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -7,15 +7,34 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Marketplace } from "@/components/marketplace";
 import { formatNumber, formatCurrency } from "@/lib/utils";
 import { Organization, User } from "@shared/schema";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import { Loader2 } from "lucide-react";
 
 export default function OrgAdminDashboard() {
   const { user, logoutMutation } = useAuth();
+  const { toast } = useToast();
+
   const { data: organization } = useQuery<Organization>({
     queryKey: ["/api/organizations", user?.organizationId],
   });
 
   const { data: pendingEmployees } = useQuery<User[]>({
-    queryKey: ["/api/users", "pending"],
+    queryKey: ["/api/users/pending"],
+  });
+
+  const approveEmployeeMutation = useMutation({
+    mutationFn: async (userId: number) => {
+      const res = await apiRequest("PATCH", `/api/users/${userId}/approve`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/users/pending"] });
+      toast({
+        title: "Success",
+        description: "Employee approved successfully",
+      });
+    },
   });
 
   return (
@@ -88,14 +107,21 @@ export default function OrgAdminDashboard() {
                           <p className="text-sm text-muted-foreground">{employee.username}</p>
                         </div>
                         <Button 
-                          onClick={() => {
-                            // Implement approval mutation
-                          }}
+                          onClick={() => approveEmployeeMutation.mutate(employee.id)}
+                          disabled={approveEmployeeMutation.isPending}
                         >
+                          {approveEmployeeMutation.isPending && (
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          )}
                           Approve
                         </Button>
                       </div>
                     ))}
+                    {!pendingEmployees?.length && (
+                      <p className="text-center text-muted-foreground">
+                        No pending employees
+                      </p>
+                    )}
                   </div>
                 </ScrollArea>
               </CardContent>

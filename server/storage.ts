@@ -63,6 +63,10 @@ export class MemStorage implements IStorage {
     );
   }
 
+  async getAllUsers(): Promise<Map<number, User>> {
+    return this.users;
+  }
+
   async createUser(user: InsertUser): Promise<User> {
     const id = this.currentIds.users++;
     const newUser = { 
@@ -85,6 +89,10 @@ export class MemStorage implements IStorage {
   // Organization methods
   async getOrganization(id: number): Promise<Organization | undefined> {
     return this.organizations.get(id);
+  }
+
+  async getAllOrganizations(): Promise<Map<number, Organization>> {
+    return this.organizations;
   }
 
   async createOrganization(org: Partial<Organization>): Promise<Organization> {
@@ -154,8 +162,8 @@ export class MemStorage implements IStorage {
     return updatedListing;
   }
 
-  getListing(id: number): Promise<Listing | undefined> {
-    return Promise.resolve(this.listings.get(id));
+  async getListing(id: number): Promise<Listing | undefined> {
+    return this.listings.get(id);
   }
 }
 
