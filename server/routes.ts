@@ -437,31 +437,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const organizations = Array.from((await storage.getAllOrganizations()).values());
     const listings = await storage.getActiveListings();
 
+    // Helper function to safely get month string
+    const getMonthString = (date: Date | string | null | undefined): string => {
+      if (!date) return 'unknown';
+      try {
+        return new Date(date).toISOString().slice(0, 7);
+      } catch (e) {
+        return 'unknown';
+      }
+    };
+
     // Calculate user growth (last 6 months)
     const userGrowth = users.reduce((acc, user) => {
-      const month = new Date(user.createdAt).toISOString().slice(0, 7);
-      acc[month] = (acc[month] || 0) + 1;
+      const month = getMonthString(user.createdAt);
+      if (month !== 'unknown') {
+        acc[month] = (acc[month] || 0) + 1;
+      }
       return acc;
     }, {} as Record<string, number>);
 
     // Calculate organization growth
     const organizationGrowth = organizations.reduce((acc, org) => {
-      const month = new Date(org.createdAt).toISOString().slice(0, 7);
-      acc[month] = (acc[month] || 0) + 1;
+      const month = getMonthString(org.createdAt);
+      if (month !== 'unknown') {
+        acc[month] = (acc[month] || 0) + 1;
+      }
       return acc;
     }, {} as Record<string, number>);
 
     // Calculate trading activity
     const soldListings = listings.filter(listing => listing.status === "sold");
     const tradingActivity = soldListings.reduce((acc, listing) => {
-      const month = new Date(listing.createdAt).toISOString().slice(0, 7);
-      const credits = parseFloat(listing.creditsAmount);
-      const volume = credits * parseFloat(listing.pricePerCredit);
+      const month = getMonthString(listing.createdAt);
+      if (month !== 'unknown') {
+        const credits = parseFloat(listing.creditsAmount);
+        const volume = credits * parseFloat(listing.pricePerCredit);
 
-      acc[month] = acc[month] || { credits: 0, volume: 0 };
-      acc[month].credits += credits;
-      acc[month].volume += volume;
-
+        acc[month] = acc[month] || { credits: 0, volume: 0 };
+        acc[month].credits += credits;
+        acc[month].volume += volume;
+      }
       return acc;
     }, {} as Record<string, { credits: number; volume: number }>);
 
