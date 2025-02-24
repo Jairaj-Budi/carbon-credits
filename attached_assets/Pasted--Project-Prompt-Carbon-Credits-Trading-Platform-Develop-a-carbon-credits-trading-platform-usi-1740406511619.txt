@@ -1,0 +1,129 @@
+### Project Prompt: Carbon Credits Trading Platform
+
+Develop a carbon credits trading platform using **Angular** for the frontend. If backend functionality is required (e.g., for data persistence, authentication, or business logic), implement it using **NestJS** with a **MySQL** database. The platform enables employers to buy and sell carbon credits, which are earned by employees based on their eco-friendly commuting choices. The system must support user registration, commute logging, points accumulation, and a marketplace for trading credits, with role-based access control for different user types.
+
+#### Core Functionalities
+
+1. **User Registration and Approval**
+   - **Employers:**
+     - Employers (representing organizations) register in the system by providing their organization name, work address, and an initial admin user’s details (name, email, password).
+     - Registrations are submitted with a "pending" status and must be approved by an admin (representing a carbon credit bank).
+     - Once approved, the organization admin can log in and manage employees.
+   - **Employees:**
+     - Employees register under an approved employer, providing their name, email, password, and one-way commute distance (in miles) from home to work.
+     - Their registration is submitted with a "pending" status and requires approval by their organization’s admin.
+     - Once approved, employees can log in and start logging commutes.
+
+2. **Commute Logging and Points Accumulation**
+   - Employees log their daily commutes, specifying the transportation method used for each workday. Options include:
+     - **Drove Alone**: 0 points per day.
+     - **Public Transport**: 1 point per mile of round-trip distance saved (2 × one-way distance).
+     - **Carpooling**: 1.5 points per mile of round-trip distance saved (2 × one-way distance).
+     - **Worked from Home**: 2 points per mile of round-trip distance saved (2 × one-way distance).
+   - The system calculates points based on the employee’s one-way commute distance (provided during registration) and the selected method.
+   - Points earned by employees are credited directly to their employer’s total carbon credits balance.
+   - Employees can view their individual points contribution, but only employers can trade the credits.
+   - Assumption: The employee’s baseline is driving alone (1,000 miles/month minus work trips), and credits are earned by reducing this through eco-friendly methods.
+
+3. **Carbon Credits Marketplace**
+   - Employers (via organization admins) can:
+     - **List Credits for Sale**: Specify the number of credits and a price per credit in virtual currency (e.g., virtual dollars).
+     - **Buy Credits**: Browse active listings and purchase credits if they have sufficient virtual currency.
+   - Transactions update:
+     - Seller’s credits decrease, and virtual money increases.
+     - Buyer’s credits increase, and virtual money decreases.
+   - Each employer starts with an initial virtual money balance (e.g., 1,000 virtual dollars) upon approval.
+
+4. **User Roles and Access Control**
+   - **System Admin**: Approves employer registrations on behalf of the carbon credit bank. Not tied to any organization.
+   - **Organization Admin**: Manages the employer’s account, approves employee registrations, lists/buys credits in the marketplace, and views total credits.
+   - **Employee**: Logs commutes, views personal points, and operates under an employer.
+
+5. **Dashboards**
+   - **Employee Dashboard**: Displays total points earned, recent commute logs, and a form to log new commutes.
+   - **Organization Admin Dashboard**: Shows total credits, list of employees, marketplace listings, and transaction history.
+   - **System Admin Dashboard**: Lists pending employer registrations for approval.
+
+#### Technical Requirements
+
+- **Frontend (Angular):**
+  - Build a single-page application using Angular.
+  - Use **Angular Material** for a consistent UI.
+  - Implement components for:
+    - Login page.
+    - Registration pages (employer and employee).
+    - Dashboards for each role.
+    - Commute logging form (date picker and method dropdown).
+    - Marketplace (listing creation and browsing).
+    - Approval interfaces for admins.
+  - Use **Angular Router** with route guards to restrict access based on user roles.
+  - Manage authentication by storing JWT tokens in local storage and including them in API requests via an HTTP interceptor.
+  - Use Angular services to handle API communication.
+
+- **Backend (NestJS with MySQL, if required):**
+  - Design a RESTful API to handle:
+    - **Authentication**: 
+      - `POST /auth/login`: Returns JWT with user role and organization ID.
+    - **Organizations**: 
+      - `POST /organizations`: Creates a new organization and org_admin user (pending status).
+      - `GET /organizations`: Lists organizations (system admin only).
+      - `PATCH /organizations/{id}/approve`: Approves an organization (system admin only).
+    - **Users**: 
+      - `POST /users`: Registers a user (employee or org_admin, with organization ID).
+      - `GET /users`: Lists employees for an organization (org_admin only).
+      - `PATCH /users/{id}/approve`: Approves an employee (org_admin only).
+    - **Commute Logs**: 
+      - `POST /commute-logs`: Creates a log and updates employer credits (employee only).
+      - `GET /commute-logs`: Retrieves an employee’s logs.
+    - **Marketplace**: 
+      - `POST /listings`: Creates a credit listing (org_admin only).
+      - `GET /listings`: Lists active listings.
+      - `POST /purchases`: Processes a purchase (org_admin only).
+    - **Dashboard**: 
+      - `GET /dashboard`: Returns role-specific summary data.
+  - Use **JWT** for authentication and **guards** for role-based access control.
+  - Define a MySQL schema:
+    - **Organizations**: `id`, `name`, `address`, `status` (pending/approved), `virtual_money_balance`, `total_credits`.
+    - **Users**: `id`, `name`, `email`, `password` (hashed), `role` (system_admin/org_admin/employee), `organization_id`, `commute_distance` (for employees), `status` (pending/approved).
+    - **CommuteLogs**: `id`, `user_id`, `date`, `method`, `points_earned`.
+    - **Listings**: `id`, `organization_id`, `credits_amount`, `price_per_credit`, `status` (active/sold).
+
+#### Project Considerations and Assumptions
+
+- **Tracking Employee Travel**:
+  - Simplified to self-reporting: Employees manually log their transportation method daily.
+  - No external APIs (e.g., Google Maps) are used; employees input commute distance during registration.
+  - Future enhancement could include verification (e.g., photos or ride-sharing API integration).
+
+- **Work Location**:
+  - Assumed to be the employer’s address, with employees providing their one-way commute distance manually.
+
+- **Transportation Method Verification**:
+  - Relies on self-reporting for simplicity. Potential abuse is acknowledged but not addressed in this implementation.
+
+- **Points System**:
+  - Based on round-trip distance (2 × one-way distance) to reflect daily commuting.
+  - Arbitrary factors (1, 1.5, 2) are used for simplicity; real-world carbon emissions data could refine this later.
+
+- **Non-Work Days**:
+  - Employees log only workdays, selecting from the provided methods (including "Worked from Home"). Non-work days are not logged.
+
+- **Initial Setup**:
+  - At least one system admin must exist to approve employers (could be seeded in the database).
+
+#### Deliverables
+
+- A fully functional Angular frontend with:
+  - User authentication and role-based navigation.
+  - Registration and approval workflows.
+  - Commute logging and points display.
+  - Marketplace for trading credits.
+- If a backend is implemented, a NestJS application with:
+  - REST API endpoints as outlined.
+  - MySQL database schema and logic to manage credits and transactions.
+- Documentation or comments explaining key decisions and assumptions.
+
+#### Notes
+
+- Focus on core functionality first (registration, logging, trading) before adding enhancements like calendar views or advanced verification.
+- Ensure the system is scalable and maintainable, with clear separation of concerns in both frontend and backend.
