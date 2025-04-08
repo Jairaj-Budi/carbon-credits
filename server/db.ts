@@ -11,6 +11,7 @@ export async function initializeDatabase() {
 
   // Initialize SQLite storage
   await sqliteStorage.initialize();
+  console.log('Database initialized successfully');
   
   return sqliteStorage;
 }
