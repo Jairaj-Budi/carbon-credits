@@ -14,9 +14,10 @@ import { validateCommuteDistance } from "@/lib/utils";
 
 const schema = z.object({
   commuteDistance: z.number()
-    .min(0, "Distance must be positive")
+    .min(0.1, "Distance must be greater than 0")
+    .max(200, "Distance cannot exceed 200 miles")
     .refine(
-      (val) => !validateCommuteDistance(val),
+      (val) => validateCommuteDistance(val) === null,
       (val) => ({ message: validateCommuteDistance(val) || "Invalid distance" })
     ),
 });
@@ -46,6 +47,13 @@ export function CommuteDistanceModal({ user }: CommuteDistanceModalProps) {
         description: "Your commute distance has been updated",
       });
     },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
   });
 
   return (
@@ -70,7 +78,8 @@ export function CommuteDistanceModal({ user }: CommuteDistanceModalProps) {
                     <Input 
                       type="number" 
                       step="0.1"
-                      min="0"
+                      min="0.1"
+                      max="200"
                       {...field}
                       onChange={e => field.onChange(parseFloat(e.target.value))}
                     />

@@ -12,11 +12,18 @@ import { format } from "date-fns";
 import { CalendarIcon, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
+import { z } from "zod";
+
+// Use a local schema for the form that accepts a Date object
+const formSchema = z.object({
+  date: z.date(),
+  method: z.enum(["drove_alone", "public_transport", "carpool", "work_from_home"]),
+});
 
 export function CommuteLogForm() {
   const { toast } = useToast();
   const form = useForm({
-    resolver: zodResolver(insertCommuteLogSchema),
+    resolver: zodResolver(formSchema),
     defaultValues: {
       date: new Date(),
       method: "drove_alone",
@@ -24,13 +31,22 @@ export function CommuteLogForm() {
   });
 
   const createLogMutation = useMutation({
-    mutationFn: async (data: any) => {
-      const res = await apiRequest("POST", "/api/commute-logs", data);
+    mutationFn: async (data: z.infer<typeof formSchema>) => {
+      // Convert the date to ISO string before sending to the server
+      const serverData = {
+        ...data,
+        date: data.date.toISOString(),
+      };
+      
+      const res = await apiRequest("POST", "/api/commute-logs", serverData);
       return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/commute-logs"] });
-      form.reset();
+      form.reset({
+        date: new Date(),
+        method: "drove_alone",
+      });
       toast({
         title: "Success",
         description: "Commute logged successfully",

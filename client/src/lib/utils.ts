@@ -40,15 +40,15 @@ export function formatPercentage(value: number): string {
   }).format(value);
 }
 
-export function validateCommuteDistance(distance: number): { isValid: boolean; error?: string } {
+export function validateCommuteDistance(distance: number): string | null {
   if (typeof distance !== 'number') {
-    return { isValid: false, error: 'Distance must be a number' };
+    return 'Distance must be a number';
   }
   if (distance <= 0) {
-    return { isValid: false, error: 'Distance must be greater than 0' };
+    return 'Distance must be greater than 0';
   }
   if (distance > 200) {
-    return { isValid: false, error: 'Distance cannot exceed 200 kilometers' };
+    return 'Distance cannot exceed 200 miles';
   }
-  return { isValid: true };
+  return null;
 }

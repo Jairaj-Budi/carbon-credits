@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { setupAuth } from "./auth";
-import { storage } from "./storage";
+import { sqliteStorage } from "./db";
 import { insertOrgSchema, insertCommuteLogSchema, insertListingSchema } from "@shared/schema";
 import { calculateCommutePoints } from "@shared/utils";
 
@@ -14,10 +14,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(403).send("Unauthorized");
     }
     const orgData = insertOrgSchema.parse(req.body);
-    const org = await storage.createOrganization(orgData);
+    const org = await sqliteStorage.createOrganization(orgData);
 
     // Update the user with the new organization
-    await storage.updateUser(req.user.id, {
+    await sqliteStorage.updateUser(req.user.id, {
       organizationId: org.id,
       status: "approved", // Auto-approve org admin
     });
@@ -27,7 +27,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/organizations/:id", async (req, res) => {
     if (!req.user) return res.status(401).send("Unauthorized");
-    const org = await storage.getOrganization(parseInt(req.params.id));
+    const org = await sqliteStorage.getOrganization(parseInt(req.params.id));
     if (!org) return res.status(404).send("Organization not found");
     res.json(org);
   });
@@ -36,7 +36,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     if (!req.user || req.user.role !== "system_admin") {
       return res.status(403).send("Unauthorized");
     }
-    const orgs = Array.from((await storage.getAllOrganizations()).values())
+    const orgs = Array.from((await sqliteStorage.getAllOrganizations()).values())
       .filter(org => org.status === "pending");
     res.json(orgs);
   });
@@ -45,7 +45,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     if (!req.user || req.user.role !== "system_admin") {
       return res.status(403).send("Unauthorized");
     }
-    const org = await storage.updateOrganization(parseInt(req.params.id), {
+    const org = await sqliteStorage.updateOrganization(parseInt(req.params.id), {
       status: "approved",
     });
     res.json(org);
@@ -57,7 +57,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(403).send("Unauthorized");
     }
 
-    const org = await storage.updateOrganization(parseInt(req.params.id), {
+    const org = await sqliteStorage.updateOrganization(parseInt(req.params.id), {
       status: "rejected",
       rejectionReason: req.body.reason
     });
@@ -71,7 +71,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     if (!req.user || req.user.role !== "org_admin") {
       return res.status(403).send("Unauthorized");
     }
-    const users = Array.from((await storage.getAllUsers()).values())
+    const users = Array.from((await sqliteStorage.getAllUsers()).values())
       .filter(user => user.status === "pending" && user.organizationId === req.user.organizationId);
     res.json(users);
   });
@@ -80,7 +80,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     if (!req.user || req.user.role !== "org_admin") {
       return res.status(403).send("Unauthorized");
     }
-    const user = await storage.updateUser(parseInt(req.params.id), {
+    const user = await sqliteStorage.updateUser(parseInt(req.params.id), {
       status: "approved",
     });
     res.json(user);
@@ -90,7 +90,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     if (!req.user || req.user.id !== parseInt(req.params.id)) {
       return res.status(403).send("Unauthorized");
     }
-    const user = await storage.updateUser(req.user.id, {
+    const user = await sqliteStorage.updateUser(req.user.id, {
       commuteDistance: req.body.commuteDistance?.toString(),
     });
     res.json(user);
@@ -98,58 +98,74 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Commute Logs
   app.post("/api/commute-logs", async (req, res) => {
-    if (!req.user || req.user.role !== "employee") {
-      return res.status(403).send("Unauthorized");
-    }
+    try {
+      if (!req.user || req.user.role !== "employee") {
+        return res.status(403).send("Unauthorized");
+      }
 
-    if (!req.user.commuteDistance) {
-      return res.status(400).send("Please set your commute distance first");
-    }
+      if (!req.user.commuteDistance) {
+        return res.status(400).send("Please set your commute distance first");
+      }
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const existingLog = (await storage.getUserCommuteLogs(req.user.id))
-      .find(log => {
-        const logDate = new Date(log.date);
-        logDate.setHours(0, 0, 0, 0);
-        return logDate.getTime() === today.getTime();
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const existingLog = (await sqliteStorage.getUserCommuteLogs(req.user.id))
+        .find(log => {
+          const logDate = new Date(log.date);
+          logDate.setHours(0, 0, 0, 0);
+          return logDate.getTime() === today.getTime();
+        });
+
+      if (existingLog) {
+        return res.status(400).send("You've already logged your commute for today");
+      }
+
+      // Make sure the date is in string format before passing to the schema validator
+      let formattedData = { ...req.body, userId: req.user.id };
+      
+      // If date is a Date object, convert it to ISO string
+      if (req.body.date instanceof Date) {
+        formattedData.date = req.body.date.toISOString();
+      }
+      
+      const logData = insertCommuteLogSchema.parse(formattedData);
+
+      const userDistance = req.user.commuteDistance ? parseFloat(req.user.commuteDistance) : 0;
+      const pointsEarned = calculateCommutePoints(userDistance, logData.method);
+
+      const log = await sqliteStorage.createCommuteLog({
+        ...logData,
+        pointsEarned: pointsEarned.toString(),
       });
 
-    if (existingLog) {
-      return res.status(400).send("You've already logged your commute for today");
-    }
+      // Update organization's total credits
+      if (req.user.organizationId) {
+        const org = await sqliteStorage.getOrganization(req.user.organizationId);
+        if (org) {
+          const newTotal = (parseFloat(org.totalCredits) + pointsEarned).toString();
+          await sqliteStorage.updateOrganization(org.id, {
+            totalCredits: newTotal,
+          });
+        }
+      }
 
-    const logData = insertCommuteLogSchema.parse({
-      ...req.body,
-      userId: req.user.id,
-      date: new Date(),
-    });
-
-    const userDistance = req.user.commuteDistance ? parseFloat(req.user.commuteDistance) : 0;
-    const pointsEarned = calculateCommutePoints(userDistance, logData.method);
-
-    const log = await storage.createCommuteLog({
-      ...logData,
-      pointsEarned: pointsEarned.toString(),
-    });
-
-    // Update organization's total credits
-    if (req.user.organizationId) {
-      const org = await storage.getOrganization(req.user.organizationId);
-      if (org) {
-        const newTotal = (parseFloat(org.totalCredits) + pointsEarned).toString();
-        await storage.updateOrganization(org.id, {
-          totalCredits: newTotal,
+      res.status(201).json(log);
+    } catch (error: unknown) {
+      console.error("Error logging commute:", error);
+      if (error instanceof Error && error.name === "ZodError") {
+        const zodError = error as any; // Type assertion for ZodError
+        return res.status(400).json({ 
+          message: "Invalid data format", 
+          errors: zodError.errors || zodError.message 
         });
       }
+      res.status(500).json({ message: "Internal server error" });
     }
-
-    res.status(201).json(log);
   });
 
   app.get("/api/commute-logs", async (req, res) => {
     if (!req.user) return res.status(401).send("Unauthorized");
-    const logs = await storage.getUserCommuteLogs(req.user.id);
+    const logs = await sqliteStorage.getUserCommuteLogs(req.user.id);
     res.json(logs);
   });
 
@@ -164,12 +180,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       organizationId: req.user.organizationId,
     });
 
-    const org = await storage.getOrganization(req.user.organizationId!);
+    const org = await sqliteStorage.getOrganization(req.user.organizationId!);
     if (!org || parseFloat(org.totalCredits) < listingData.creditsAmount) {
       return res.status(400).send("Insufficient credits");
     }
 
-    const listing = await storage.createListing({
+    const listing = await sqliteStorage.createListing({
       ...listingData,
       creditsAmount: listingData.creditsAmount.toString(),
       pricePerCredit: listingData.pricePerCredit.toString(),
@@ -179,7 +195,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/listings", async (req, res) => {
     if (!req.user) return res.status(401).send("Unauthorized");
-    const listings = await storage.getActiveListings();
+    const listings = await sqliteStorage.getActiveListings();
     res.json(listings);
   });
 
@@ -188,13 +204,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(403).send("Unauthorized");
     }
 
-    const listing = await storage.getListing(parseInt(req.params.id));
+    const listing = await sqliteStorage.getListing(parseInt(req.params.id));
     if (!listing || listing.status !== "active") {
       return res.status(404).send("Listing not found");
     }
 
-    const buyerOrg = await storage.getOrganization(req.user.organizationId!);
-    const sellerOrg = await storage.getOrganization(listing.organizationId);
+    const buyerOrg = await sqliteStorage.getOrganization(req.user.organizationId!);
+    const sellerOrg = await sqliteStorage.getOrganization(listing.organizationId);
 
     if (!buyerOrg || !sellerOrg) {
       return res.status(400).send("Invalid organization");
@@ -206,19 +222,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
 
     // Update buyer
-    await storage.updateOrganization(buyerOrg.id, {
+    await sqliteStorage.updateOrganization(buyerOrg.id, {
       virtualBalance: (parseFloat(buyerOrg.virtualBalance) - totalCost).toString(),
       totalCredits: (parseFloat(buyerOrg.totalCredits) + parseFloat(listing.creditsAmount)).toString(),
     });
 
     // Update seller
-    await storage.updateOrganization(sellerOrg.id, {
+    await sqliteStorage.updateOrganization(sellerOrg.id, {
       virtualBalance: (parseFloat(sellerOrg.virtualBalance) + totalCost).toString(),
       totalCredits: (parseFloat(sellerOrg.totalCredits) - parseFloat(listing.creditsAmount)).toString(),
     });
 
     // Mark listing as sold
-    await storage.updateListing(listing.id, { status: "sold" });
+    await sqliteStorage.updateListing(listing.id, { status: "sold" });
 
     res.json({ message: "Purchase successful" });
   });
@@ -227,7 +243,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/commute-logs/analytics", async (req, res) => {
     if (!req.user) return res.status(401).send("Unauthorized");
 
-    const logs = await storage.getUserCommuteLogs(req.user.id);
+    const logs = await sqliteStorage.getUserCommuteLogs(req.user.id);
     const analytics = {
       totalPoints: logs.reduce((sum, log) => sum + parseFloat(log.pointsEarned), 0),
       methodBreakdown: logs.reduce((acc, log) => {
@@ -247,14 +263,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/organizations/:id/analytics", async (req, res) => {
     if (!req.user) return res.status(401).send("Unauthorized");
 
-    const org = await storage.getOrganization(parseInt(req.params.id));
+    const org = await sqliteStorage.getOrganization(parseInt(req.params.id));
     if (!org) return res.status(404).send("Organization not found");
 
-    const users = Array.from((await storage.getAllUsers()).values())
+    const users = Array.from((await sqliteStorage.getAllUsers()).values())
       .filter(u => u.organizationId === org.id);
 
     const allLogs = await Promise.all(
-      users.map(user => storage.getUserCommuteLogs(user.id))
+      users.map(user => sqliteStorage.getUserCommuteLogs(user.id))
     );
 
     const flatLogs = allLogs.flat();
@@ -285,7 +301,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(403).send("Unauthorized");
     }
 
-    const listings = await storage.getActiveListings();
+    const listings = await sqliteStorage.getActiveListings();
     const orgListings = listings.filter(
       listing => listing.organizationId === req.user!.organizationId
     );
@@ -310,14 +326,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(403).send("Unauthorized");
     }
 
-    const org = await storage.getOrganization(req.user.organizationId!);
+    const org = await sqliteStorage.getOrganization(req.user.organizationId!);
     if (!org) return res.status(404).send("Organization not found");
 
-    const users = Array.from((await storage.getAllUsers()).values())
+    const users = Array.from((await sqliteStorage.getAllUsers()).values())
       .filter(u => u.organizationId === org.id);
 
     const allLogs = await Promise.all(
-      users.map(user => storage.getUserCommuteLogs(user.id))
+      users.map(user => sqliteStorage.getUserCommuteLogs(user.id))
     );
 
     const flatLogs = allLogs.flat();
@@ -372,7 +388,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(403).send("Unauthorized");
     }
 
-    const listings = await storage.getActiveListings();
+    const listings = await sqliteStorage.getActiveListings();
 
     // Filter listings for the organization
     const orgListings = listings.filter(
@@ -433,9 +449,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(403).send("Unauthorized");
     }
 
-    const users = Array.from((await storage.getAllUsers()).values());
-    const organizations = Array.from((await storage.getAllOrganizations()).values());
-    const listings = await storage.getActiveListings();
+    const users = Array.from((await sqliteStorage.getAllUsers()).values());
+    const organizations = Array.from((await sqliteStorage.getAllOrganizations()).values());
+    const listings = await sqliteStorage.getActiveListings();
 
     // Helper function to safely get month string
     const getMonthString = (date: Date | string | null | undefined): string => {
@@ -482,7 +498,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     // Get all commute logs
     const allLogs = await Promise.all(
-      users.map(user => storage.getUserCommuteLogs(user.id))
+      users.map(user => sqliteStorage.getUserCommuteLogs(user.id))
     );
     const flatLogs = allLogs.flat();
 

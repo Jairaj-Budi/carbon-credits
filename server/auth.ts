@@ -4,7 +4,7 @@ import { Express } from "express";
 import session from "express-session";
 import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
-import { storage } from "./storage";
+import { sqliteStorage } from "./db";
 import { User as SelectUser } from "@shared/schema";
 
 declare global {
@@ -33,7 +33,7 @@ export function setupAuth(app: Express) {
     secret: process.env.SESSION_SECRET!,
     resave: false,
     saveUninitialized: false,
-    store: storage.sessionStore,
+    store: sqliteStorage.sessionStore,
   };
 
   app.set("trust proxy", 1);
@@ -43,7 +43,7 @@ export function setupAuth(app: Express) {
 
   passport.use(
     new LocalStrategy(async (username, password, done) => {
-      const user = await storage.getUserByUsername(username);
+      const user = await sqliteStorage.getUserByUsername(username);
       if (!user || !(await comparePasswords(password, user.password))) {
         return done(null, false);
       } else {
@@ -54,17 +54,17 @@ export function setupAuth(app: Express) {
 
   passport.serializeUser((user, done) => done(null, user.id));
   passport.deserializeUser(async (id: number, done) => {
-    const user = await storage.getUser(id);
+    const user = await sqliteStorage.getUser(id);
     done(null, user);
   });
 
   app.post("/api/register", async (req, res, next) => {
-    const existingUser = await storage.getUserByUsername(req.body.username);
+    const existingUser = await sqliteStorage.getUserByUsername(req.body.username);
     if (existingUser) {
       return res.status(400).send("Username already exists");
     }
 
-    const user = await storage.createUser({
+    const user = await sqliteStorage.createUser({
       ...req.body,
       password: await hashPassword(req.body.password),
     });
