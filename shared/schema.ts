@@ -8,7 +8,9 @@ export interface User {
   role: "system_admin" | "org_admin" | "employee";
   organizationId?: number | null;
   commuteDistance?: string | null;
-  status: "pending" | "approved";
+  status: "pending" | "approved" | "rejected";
+  organizationRequest?: number | null;
+  rejectionReason?: string | null;
   createdAt: string;
 }
 
@@ -47,8 +49,9 @@ export const insertUserSchema = z.object({
   name: z.string(),
   role: z.enum(["system_admin", "org_admin", "employee"]),
   organizationId: z.number().optional(),
+  organizationRequest: z.number().optional(),
   commuteDistance: z.number().optional(),
-  status: z.enum(["pending", "approved"]).default("pending"),
+  status: z.enum(["pending", "approved", "rejected"]).default("pending"),
 });
 
 export const insertOrgSchema = z.object({

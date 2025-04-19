@@ -79,10 +79,19 @@ export class SQLiteStorage implements IStorage {
           role TEXT NOT NULL,
           status TEXT NOT NULL,
           organizationId INTEGER,
-          commuteDistance TEXT
+          commuteDistance TEXT,
+          createdAt TEXT
         )
       `);
-      console.log('Users table created');
+      console.log('Users table created/verified');
+
+      // Add createdAt to users if it doesn't exist (for existing databases)
+      try {
+        this.db.prepare("SELECT createdAt FROM users LIMIT 1").get();
+      } catch (e) {
+        console.log("Adding createdAt column to users table");
+        this.db.prepare("ALTER TABLE users ADD COLUMN createdAt TEXT").run();
+      }
 
       this.db.exec(`
         CREATE TABLE IF NOT EXISTS organizations (
@@ -91,10 +100,19 @@ export class SQLiteStorage implements IStorage {
           description TEXT,
           virtualBalance TEXT NOT NULL,
           totalCredits TEXT NOT NULL,
-          status TEXT NOT NULL
+          status TEXT NOT NULL,
+          createdAt TEXT
         )
       `);
-      console.log('Organizations table created');
+      console.log('Organizations table created/verified');
+
+      // Add createdAt to organizations if it doesn't exist (for existing databases)
+      try {
+        this.db.prepare("SELECT createdAt FROM organizations LIMIT 1").get();
+      } catch (e) {
+        console.log("Adding createdAt column to organizations table");
+        this.db.prepare("ALTER TABLE organizations ADD COLUMN createdAt TEXT").run();
+      }
 
       this.db.exec(`
         CREATE TABLE IF NOT EXISTS commute_logs (
@@ -106,7 +124,7 @@ export class SQLiteStorage implements IStorage {
           FOREIGN KEY (userId) REFERENCES users(id)
         )
       `);
-      console.log('Commute logs table created');
+      console.log('Commute logs table created/verified');
 
       this.db.exec(`
         CREATE TABLE IF NOT EXISTS listings (
@@ -119,7 +137,7 @@ export class SQLiteStorage implements IStorage {
           FOREIGN KEY (organizationId) REFERENCES organizations(id)
         )
       `);
-      console.log('Listings table created');
+      console.log('Listings table created/verified');
 
       // Create initial admin if not exists
       const admin = await this.getUserByUsername("admin");
@@ -168,16 +186,45 @@ export class SQLiteStorage implements IStorage {
 
   async createUser(user: InsertUser): Promise<User> {
     if (!this.db) throw new Error("Database not initialized");
+    
+    // Add organizationRequest column to users table if it doesn't exist
+    try {
+      this.db.prepare("SELECT organizationRequest FROM users LIMIT 1").get();
+    } catch (e) {
+      console.log("Adding organizationRequest column to users table");
+      this.db.prepare("ALTER TABLE users ADD COLUMN organizationRequest INTEGER").run();
+    }
+    
+    // Add rejectionReason column to users table if it doesn't exist
+    try {
+      this.db.prepare("SELECT rejectionReason FROM users LIMIT 1").get();
+    } catch (e) {
+      console.log("Adding rejectionReason column to users table");
+      this.db.prepare("ALTER TABLE users ADD COLUMN rejectionReason TEXT").run();
+    }
+    
+    // Add createdAt column if it doesn't exist (idempotent)
+    try {
+      this.db.prepare("SELECT createdAt FROM users LIMIT 1").get();
+    } catch (e) {
+      console.log("Adding createdAt column to users table");
+      this.db.prepare("ALTER TABLE users ADD COLUMN createdAt TEXT").run();
+    }
+
+    const now = new Date().toISOString(); // Get current timestamp
+
     const result = this.db.prepare(`
-      INSERT INTO users (username, password, name, role, status, commuteDistance)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO users (username, password, name, role, status, commuteDistance, organizationRequest, createdAt)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       user.username,
       user.password,
       user.name,
       user.role,
       user.status,
-      user.commuteDistance?.toString() || null
+      user.commuteDistance?.toString() || null,
+      user.organizationRequest || null,
+      now // Insert timestamp
     );
     
     const createdUser = await this.getUser(result.lastInsertRowid as number);
@@ -216,15 +263,27 @@ export class SQLiteStorage implements IStorage {
 
   async createOrganization(org: Partial<Organization>): Promise<Organization> {
     if (!this.db) throw new Error("Database not initialized");
+
+    // Add createdAt column if it doesn't exist (idempotent)
+    try {
+      this.db.prepare("SELECT createdAt FROM organizations LIMIT 1").get();
+    } catch (e) {
+      console.log("Adding createdAt column to organizations table");
+      this.db.prepare("ALTER TABLE organizations ADD COLUMN createdAt TEXT").run();
+    }
+    
+    const now = new Date().toISOString(); // Get current timestamp
+
     const result = this.db.prepare(`
-      INSERT INTO organizations (name, description, virtualBalance, totalCredits, status)
-      VALUES (?, ?, ?, ?, ?)
+      INSERT INTO organizations (name, description, virtualBalance, totalCredits, status, createdAt)
+      VALUES (?, ?, ?, ?, ?, ?)
     `).run(
       org.name,
       org.description || "",
       org.virtualBalance || "1000",
       org.totalCredits || "0",
-      org.status || "pending"
+      org.status || "pending",
+      now // Insert timestamp
     );
     
     const newOrg = await this.getOrganization(result.lastInsertRowid as number);
@@ -246,6 +305,65 @@ export class SQLiteStorage implements IStorage {
     const updatedOrg = await this.getOrganization(id);
     if (!updatedOrg) throw new Error("Organization not found");
     return updatedOrg;
+  }
+
+  // Organization membership methods
+  async getPendingOrganizationRequests(organizationId: number): Promise<User[]> {
+    if (!this.db) throw new Error("Database not initialized");
+    // Add organizationRequest column to users table if it doesn't exist
+    try {
+      this.db.prepare("SELECT organizationRequest FROM users LIMIT 1").get();
+    } catch (e) {
+      console.log("Adding organizationRequest column to users table");
+      this.db.prepare("ALTER TABLE users ADD COLUMN organizationRequest INTEGER").run();
+    }
+    
+    // Add rejectionReason column to users table if it doesn't exist
+    try {
+      this.db.prepare("SELECT rejectionReason FROM users LIMIT 1").get();
+    } catch (e) {
+      console.log("Adding rejectionReason column to users table");
+      this.db.prepare("ALTER TABLE users ADD COLUMN rejectionReason TEXT").run();
+    }
+    
+    const users = this.db.prepare(`
+      SELECT * FROM users 
+      WHERE status = 'pending' AND organizationRequest = ?
+    `).all(organizationId) as User[];
+    
+    return users;
+  }
+
+  async approveOrganizationRequest(userId: number, organizationId: number): Promise<User> {
+    if (!this.db) throw new Error("Database not initialized");
+    
+    this.db.prepare(`
+      UPDATE users SET 
+      status = 'approved', 
+      organizationId = ?,
+      organizationRequest = NULL
+      WHERE id = ?
+    `).run(organizationId, userId);
+    
+    const updatedUser = await this.getUser(userId);
+    if (!updatedUser) throw new Error("User not found");
+    return updatedUser;
+  }
+
+  async rejectOrganizationRequest(userId: number, organizationId: number, reason?: string): Promise<User> {
+    if (!this.db) throw new Error("Database not initialized");
+    
+    this.db.prepare(`
+      UPDATE users SET 
+      status = 'rejected', 
+      organizationRequest = NULL,
+      rejectionReason = ?
+      WHERE id = ?
+    `).run(reason || "Request rejected", userId);
+    
+    const updatedUser = await this.getUser(userId);
+    if (!updatedUser) throw new Error("User not found");
+    return updatedUser;
   }
 
   // Commute log methods
@@ -303,6 +421,20 @@ export class SQLiteStorage implements IStorage {
     const listing = this.db.prepare("SELECT * FROM listings WHERE id = ?")
       .get(id) as Listing | undefined;
     return listing;
+  }
+
+  async getSoldListingsByOrg(organizationId: number): Promise<Listing[]> {
+    if (!this.db) throw new Error("Database not initialized");
+    return this.db.prepare(
+        "SELECT * FROM listings WHERE organizationId = ? AND status = 'sold'"
+      ).all(organizationId) as Listing[];
+  }
+
+  // Add new method to get ALL sold listings
+  async getAllSoldListings(): Promise<Listing[]> {
+    if (!this.db) throw new Error("Database not initialized");
+    return this.db.prepare("SELECT * FROM listings WHERE status = 'sold'")
+      .all() as Listing[];
   }
 
   async updateListing(id: number, updates: Partial<Listing>): Promise<Listing> {

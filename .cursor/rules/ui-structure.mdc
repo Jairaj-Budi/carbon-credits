@@ -1,0 +1,180 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# Client Structure Rules
+
+## Directory Overview
+
+### @client/src
+- Main source directory for the client application
+- Contains core application setup and configuration
+- Houses all React components, pages, and utilities
+
+### @client/src/pages
+- Contains top-level page components
+- Each file represents a distinct route/view
+- Implements role-specific dashboards:
+  - Organization admin dashboard
+  - System admin dashboard
+  - Employee dashboard
+  - Authentication pages
+
+### @client/src/components
+- Reusable UI components
+- Feature-specific components
+- Organized by functionality and feature domain
+- Contains specialized components for:
+  - Organization registration
+  - Analytics dashboards
+  - Commute logging
+  - Marketplace functionality
+
+### @client/src/components/ui
+- Houses atomic UI components
+- Reusable design system elements
+- Common interface building blocks
+
+### @client/src/components/auth
+- Authentication-related components
+- Login/registration forms
+- Authentication state management
+- Security-related UI elements
+
+### @client/src/lib
+- Utility functions and helpers
+- Shared business logic
+- API integration utilities
+- Type definitions and interfaces
+
+### @client/src/hooks
+- Custom React hooks
+- Shared stateful logic
+- Feature-specific hooks
+- Data fetching and caching logic
+
+## Architecture Rules
+
+1. **Component Organization**
+   - Follow atomic design principles
+   - Keep components focused and single-responsibility
+   - Use consistent naming conventions
+   - Implement proper prop typing
+
+2. **State Management**
+   - Use React hooks for local state
+   - Implement context for shared state
+   - Keep state close to where it's used
+   - Follow immutability principles
+
+3. **Routing Structure**
+   - Implement role-based routing
+   - Use lazy loading for route components
+   - Maintain clear route hierarchy
+   - Implement proper route guards
+
+4. **Type Safety**
+   - Use TypeScript for all components
+   - Define proper interfaces for props
+   - Share types with backend using @shared/schema
+   - Maintain strict type checking
+
+5. **Styling Guidelines**
+   - Use Tailwind CSS for styling
+   - Follow responsive design principles
+   - Maintain consistent theming
+   - Implement dark/light mode support
+
+## Feature Components
+
+1. **Analytics Dashboards**
+   - Implement data visualization
+   - Real-time updates
+   - Interactive charts and graphs
+   - Filterable data views
+
+2. **Commute Tracking**
+   - User-friendly input forms
+   - Distance calculation integration
+   - Transportation mode selection
+   - History viewing
+
+3. **Organization Management**
+   - Registration workflow
+   - Member management interface
+   - Profile management
+   - Administrative controls
+
+4. **Carbon Credits**
+   - Credit balance display
+   - Transaction history
+   - Marketplace interface
+   - Transfer mechanisms
+
+## Best Practices
+
+1. **Performance**
+   - Implement code splitting
+   - Use proper memoization
+   - Optimize bundle size
+   - Implement proper loading states
+
+2. **Accessibility**
+   - Follow WCAG guidelines
+   - Implement proper ARIA labels
+   - Ensure keyboard navigation
+   - Maintain proper contrast ratios
+
+3. **Error Handling**
+   - Implement error boundaries
+   - Show user-friendly error messages
+   - Handle network errors gracefully
+   - Provide fallback UI states
+
+4. **Code Quality**
+   - Follow ESLint rules
+   - Maintain consistent formatting
+   - Write clear documentation
+   - Use meaningful variable names
+
+## UI/UX Guidelines
+
+1. **Design System**
+   - Use consistent spacing
+   - Follow color palette rules
+   - Maintain typography hierarchy
+   - Use consistent component patterns
+
+2. **Responsive Design**
+   - Mobile-first approach
+   - Breakpoint consistency
+   - Flexible layouts
+   - Touch-friendly interfaces
+
+3. **User Experience**
+   - Clear navigation patterns
+   - Intuitive user flows
+   - Proper loading indicators
+   - Helpful error messages
+
+4. **Forms**
+   - Clear validation messages
+   - Proper input formatting
+   - Accessible form controls
+   - Consistent submission handling
+
+## Development Workflow
+
+1. **Component Development**
+   - Start with UI components
+   - Build feature components
+   - Integrate with pages
+   - Add proper documentation
+
+2. **State Management**
+   - Plan state structure
+   - Implement data flow
+   - Add error handling
+   - Optimize performance
+   

@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { formatNumber, formatCurrency } from "@/lib/utils";
 import { Loader2 } from "lucide-react";
+import { useAuth } from "@/hooks/use-auth";
 import {
   BarChart,
   Bar,
@@ -17,6 +18,7 @@ import {
   Pie,
   Cell
 } from "recharts";
+import { useEffect } from "react";
 
 const COLORS = ["#2563eb", "#16a34a", "#dc2626", "#ca8a04"];
 
@@ -58,13 +60,24 @@ type MarketplaceAnalytics = {
 };
 
 export function AnalyticsDashboard() {
+  const { user } = useAuth();
+
   const { data: orgSummary, isLoading: isLoadingOrg } = useQuery<OrgSummary>({
     queryKey: ["/api/analytics/organization-summary"],
+    enabled: !!user?.organizationId,
+    staleTime: 30000,
   });
 
   const { data: marketplaceAnalytics, isLoading: isLoadingMarket } = useQuery<MarketplaceAnalytics>({
     queryKey: ["/api/analytics/marketplace"],
+    enabled: !!user?.organizationId,
+    staleTime: 30000,
   });
+
+  // Log the raw data fetched from the marketplace analytics endpoint
+  useEffect(() => {
+     console.log("[AnalyticsDashboard] Raw Marketplace Analytics:", marketplaceAnalytics);
+  }, [marketplaceAnalytics]);
 
   if (isLoadingOrg || isLoadingMarket) {
     return (
@@ -74,25 +87,33 @@ export function AnalyticsDashboard() {
     );
   }
 
+  if (!orgSummary || !marketplaceAnalytics) {
+    return (
+      <div className="flex justify-center p-8">
+        <p className="text-muted-foreground">No data available</p>
+      </div>
+    );
+  }
+
   // Transform data for charts
-  const methodDistribution = orgSummary?.methodDistribution ? 
-    Object.entries(orgSummary.methodDistribution).map(([name, value]) => ({
-      name,
-      value
-    })) : [];
+  const methodDistribution = Object.entries(orgSummary.methodDistribution).map(([name, value]) => ({
+    name,
+    value
+  }));
 
-  const dailyTrend = orgSummary?.dailyTrend ?
-    Object.entries(orgSummary.dailyTrend).map(([date, points]) => ({
-      date,
-      points
-    })) : [];
+  const dailyTrend = Object.entries(orgSummary.dailyTrend).map(([date, points]) => ({
+    date,
+    points
+  }));
 
-  const salesTrend = marketplaceAnalytics?.trends.sales ?
-    Object.entries(marketplaceAnalytics.trends.sales).map(([month, data]) => ({
-      month,
-      credits: data.credits,
-      value: data.value
-    })) : [];
+  const salesTrend = Object.entries(marketplaceAnalytics.trends.sales).map(([month, data]) => ({
+    month,
+    credits: data.credits,
+    value: data.value
+  }));
+  
+  // Log the transformed data being passed to the chart
+  console.log("[AnalyticsDashboard] Transformed Sales Trend for Chart:", salesTrend);
 
   return (
     <div className="space-y-8">

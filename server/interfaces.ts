@@ -16,6 +16,11 @@ export interface IStorage {
   getAllOrganizations(): Promise<Map<number, Organization>>;
   createOrganization(org: Partial<Organization>): Promise<Organization>;
   updateOrganization(id: number, updates: Partial<Organization>): Promise<Organization>;
+  
+  // Organization membership methods
+  getPendingOrganizationRequests(organizationId: number): Promise<User[]>;
+  approveOrganizationRequest(userId: number, organizationId: number): Promise<User>;
+  rejectOrganizationRequest(userId: number, organizationId: number, reason?: string): Promise<User>;
 
   // Commute log methods
   createCommuteLog(log: Partial<CommuteLog>): Promise<CommuteLog>;

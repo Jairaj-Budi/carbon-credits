@@ -10,6 +10,8 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Loader2 } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { Organization } from "@shared/schema";
 
 type LoginFormData = {
   username: string;
@@ -23,6 +25,7 @@ const loginSchema = z.object({
 
 const registerSchema = insertUserSchema.extend({
   confirmPassword: z.string(),
+  organizationRequest: z.number().optional(),
 }).refine((data) => data.password === data.confirmPassword, {
   message: "Passwords don't match",
   path: ["confirmPassword"],
@@ -31,6 +34,10 @@ const registerSchema = insertUserSchema.extend({
 export default function AuthPage() {
   const [, setLocation] = useLocation();
   const { user, loginMutation, registerMutation } = useAuth();
+
+  const { data: organizations } = useQuery<Organization[]>({
+    queryKey: ["/api/organizations/public"],
+  });
 
   const loginForm = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
@@ -48,6 +55,15 @@ export default function AuthPage() {
       status: "pending",
     },
   });
+
+  // Watch the role to conditionally show organization selection
+  const selectedRole = registerForm.watch("role");
+
+  // Handle register submission
+  const handleRegister = async (data: z.infer<typeof registerSchema>) => {
+    // Register the user
+    registerMutation.mutate(data);
+  };
 
   if (user) {
     setLocation("/");
@@ -130,7 +146,7 @@ export default function AuthPage() {
                 </CardHeader>
                 <CardContent>
                   <Form {...registerForm}>
-                    <form onSubmit={registerForm.handleSubmit(data => registerMutation.mutate(data))} className="space-y-4">
+                    <form onSubmit={registerForm.handleSubmit(handleRegister)} className="space-y-4">
                       <FormField
                         control={registerForm.control}
                         name="name"
@@ -202,6 +218,38 @@ export default function AuthPage() {
                           </FormItem>
                         )}
                       />
+
+                      {/* Show organization selection only for employees */}
+                      {selectedRole === "employee" && (
+                        <FormField
+                          control={registerForm.control}
+                          name="organizationRequest"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Request to join Organization</FormLabel>
+                              <FormControl>
+                                <select
+                                  className="w-full rounded-md border border-input bg-background px-3 py-2"
+                                  onChange={(e) => field.onChange(parseInt(e.target.value))}
+                                  value={field.value || ""}
+                                >
+                                  <option value="">Select an organization</option>
+                                  {organizations?.map((org) => (
+                                    <option key={org.id} value={org.id}>
+                                      {org.name}
+                                    </option>
+                                  ))}
+                                </select>
+                              </FormControl>
+                              <FormMessage />
+                              <p className="text-xs text-muted-foreground mt-1">
+                                You'll need approval from the organization admin before you can log commutes.
+                              </p>
+                            </FormItem>
+                          )}
+                        />
+                      )}
+
                       <Button type="submit" className="w-full" disabled={registerMutation.isPending}>
                         {registerMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                         Register

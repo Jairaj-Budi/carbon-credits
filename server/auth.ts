@@ -86,8 +86,22 @@ export function setupAuth(app: Express) {
     });
   });
 
-  app.get("/api/user", (req, res) => {
+  app.get("/api/user", async (req, res) => {
     if (!req.isAuthenticated()) return res.sendStatus(401);
-    res.json(req.user);
+    
+    // If the user has an organizationRequest, fetch that organization's details too
+    let requestedOrg = null;
+    if (req.user?.organizationRequest) {
+      requestedOrg = await sqliteStorage.getOrganization(req.user.organizationRequest);
+    }
+    
+    // Return the user with optional requested org details
+    res.json({
+      ...req.user,
+      requestedOrg: requestedOrg ? {
+        id: requestedOrg.id,
+        name: requestedOrg.name
+      } : null
+    });
   });
 }

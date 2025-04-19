@@ -116,6 +116,43 @@ export class MemStorage implements IStorage {
     return updatedOrg;
   }
 
+  // Organization membership methods
+  async getPendingOrganizationRequests(organizationId: number): Promise<User[]> {
+    return Array.from(this.users.values()).filter(
+      (user) => user.status === "pending" && user.organizationRequest === organizationId
+    );
+  }
+
+  async approveOrganizationRequest(userId: number, organizationId: number): Promise<User> {
+    const user = this.users.get(userId);
+    if (!user) throw new Error("User not found");
+    
+    const updatedUser = { 
+      ...user, 
+      status: "approved" as const, 
+      organizationId: organizationId,
+      organizationRequest: null 
+    };
+    
+    this.users.set(userId, updatedUser);
+    return updatedUser;
+  }
+
+  async rejectOrganizationRequest(userId: number, organizationId: number, reason?: string): Promise<User> {
+    const user = this.users.get(userId);
+    if (!user) throw new Error("User not found");
+    
+    const updatedUser = { 
+      ...user, 
+      status: "rejected" as const, 
+      organizationRequest: null,
+      rejectionReason: reason || "Request rejected" 
+    };
+    
+    this.users.set(userId, updatedUser);
+    return updatedUser;
+  }
+
   // Commute log methods
   async createCommuteLog(log: Partial<CommuteLog>): Promise<CommuteLog> {
     const id = this.currentIds.commuteLogs++;

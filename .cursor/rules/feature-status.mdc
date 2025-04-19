@@ -1,0 +1,98 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# Feature Status & Progress Tracking
+
+This document tracks the implementation status of features outlined in the project presentation.
+
+## Implemented & Partially Implemented Features
+
+### 1. Organization Management
+
+*   **Status:** Partially Implemented / Buggy
+*   **Description:** Allows organizations to register, but the verification/approval workflow and member management have issues. Basic profile viewing/editing might exist.
+*   **Key Files/Components:**
+    *   `@client/src/components/organization-registration.tsx`: Handles the initial registration form.
+    *   `@client/src/pages/org-admin-dashboard.tsx`: Intended for managing the organization, viewing members, etc. (Currently lacking features).
+    *   `@client/src/pages/system-admin-dashboard.tsx`: Intended for system admins to approve organizations. (Approval mechanism might be missing/incomplete).
+    *   `@server/routes.ts`: Contains API endpoints for creating, fetching, and potentially updating organizations and handling membership (e.g., `/api/organizations`, `/api/users/:userId/join/:orgId`).
+    *   `@server/storage.ts` / `@server/sqlite-storage.ts`: Handles database operations for organizations and user-organization relationships.
+*   **Notes/Issues:**
+    *   The user reported that the employee enrollment flow is incorrect. Employees should request to join an organization *before* logging commutes.
+    *   Organization admins cannot see pending requests from employees.
+    *   The approval workflow for new organizations by system admins needs verification.
+    *   Org Admin Dashboard features are largely incomplete.
+
+### 2. User Management
+
+*   **Status:** Partially Implemented
+*   **Description:** Core authentication (login/signup) and role-based access control seem to be in place, separating System Admin, Org Admin, and Employee views. Basic profile management likely exists.
+*   **Key Files/Components:**
+    *   `@client/src/pages/auth-page.tsx`: Handles login and signup UI.
+    *   `@client/src/components/auth/`: Contains authentication-related UI components.
+    *   `@client/src/pages/employee-dashboard.tsx`, `@client/src/pages/org-admin-dashboard.tsx`, `@client/src/pages/system-admin-dashboard.tsx`: Role-specific views.
+    *   `@server/auth.ts`: Manages authentication logic, sessions, and authorization middleware.
+    *   `@server/routes.ts`: Defines user-related endpoints (e.g., `/api/auth/login`, `/api/auth/signup`, `/api/users/me`).
+    *   `@server/storage.ts` / `@server/sqlite-storage.ts`: Handles user data storage.
+*   **Notes/Issues:**
+    *   Needs integration with the corrected Organization Management flow for employee enrollment.
+    *   Profile editing features might need enhancement.
+
+### 3. Commute Tracking
+
+*   **Status:** Implemented (Core logging) / Partially Implemented (History/Context)
+*   **Description:** Users can log commutes, select transportation modes, and calculate distance. History viewing might be basic or missing.
+*   **Key Files/Components:**
+    *   `@client/src/components/commute-log-form.tsx`: UI for submitting commute logs.
+    *   `@client/src/components/commute-distance-modal.tsx`: Likely assists with distance input/calculation.
+    *   `@client/src/pages/employee-dashboard.tsx`: Where commute logging is initiated and history might be displayed.
+    *   `@server/routes.ts`: Contains endpoints for creating and fetching commute logs (e.g., `/api/commutes`).
+    *   `@server/storage.ts` / `@server/sqlite-storage.ts`: Stores commute log data.
+*   **Notes/Issues:**
+    *   Currently accessible directly after employee creation, bypassing the necessary organization enrollment step.
+    *   Commute history display needs implementation or verification.
+
+### 4. Carbon Credits System
+
+*   **Status:** Partially Implemented
+*   **Description:** Basic infrastructure might exist for calculating credits based on commutes and potentially displaying balances/history. Marketplace functionality is present but might be incomplete.
+*   **Key Files/Components:**
+    *   `@client/src/components/marketplace.tsx`: UI for interacting with credits/listings.
+    *   `@client/src/pages/employee-dashboard.tsx` / `@client/src/pages/org-admin-dashboard.tsx`: Potential areas for displaying credit balances/history.
+    *   `@server/routes.ts`: Should contain logic/endpoints for calculating credits (potentially triggered by commute logging) and managing listings/transactions.
+    *   `@server/storage.ts` / `@server/sqlite-storage.ts`: Stores credit-related data (balances, transactions, listings).
+*   **Notes/Issues:**
+    *   The exact calculation logic needs verification.
+    *   UI for displaying credit balance, history, and marketplace interactions needs review and completion.
+
+### 5. Analytics Dashboards
+
+*   **Status:** Partially Implemented
+*   **Description:** Dedicated dashboard components exist for different roles, suggesting basic structure is in place. Data aggregation and visualization might be incomplete.
+*   **Key Files/Components:**
+    *   `@client/src/components/analytics-dashboard.tsx`: General analytics component (likely used in Org Admin).
+    *   `@client/src/components/system-analytics-dashboard.tsx`: Specific dashboard for System Admins.
+    *   `@client/src/pages/org-admin-dashboard.tsx`, `@client/src/pages/system-admin-dashboard.tsx`: Integrate the dashboard components.
+    *   `@server/routes.ts`: Needs endpoints to provide aggregated data for the dashboards.
+    *   `@server/storage.ts` / `@server/sqlite-storage.ts`: Requires logic to query and aggregate data efficiently.
+*   **Notes/Issues:**
+    *   Specific charts, graphs, and data points displayed need implementation/verification based on presentation requirements.
+    *   Real-time updates might not be implemented.
+
+## Pending Features (Not Started)
+
+Based on the presentation script's "Future Roadmap":
+
+1.  **Mobile Application Development:** Native or PWA mobile app.
+2.  **Integration with Public Transport Systems:** Automatically fetch commute data.
+3.  **Advanced Analytics Dashboard:** More detailed reporting and filtering options.
+4.  **Community Features and Social Sharing:** Leaderboards, team challenges, etc.
+5.  **Gamification Elements:** Badges, points, rewards beyond basic credits.
+
+## Key Areas Needing Immediate Attention
+
+1.  **Employee-Organization Enrollment Flow:** Rework the user flow so employees must request and be approved by an organization *before* accessing commute logging. Implement the necessary UI for admins to view and approve requests.
+2.  **Dashboard Completeness:** Flesh out the Org Admin and System Admin dashboards with the features described (member management, pending approvals, analytics display).
+3.  **Carbon Credit Display & History:** Implement clear UI elements for users and organizations to view their credit balance and transaction history.

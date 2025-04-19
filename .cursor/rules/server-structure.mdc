@@ -1,0 +1,153 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+
+# Server Structure Rules
+
+## Core Files Overview
+
+### @server/index.ts
+- Main entry point for the server
+- Sets up Express application and middleware
+- Initializes database connection
+- Configures routes and error handling
+- Handles development/production environment setup
+- Manages server startup on port 5000
+
+### @server/interfaces.ts
+- Contains TypeScript interfaces for core functionality
+- Defines storage interface for data operations
+- Includes interfaces for:
+  - User management
+  - Organization operations
+  - Commute logging
+  - Listing management
+
+### @server/routes.ts
+- Contains all API route definitions
+- Implements RESTful endpoints
+- Handles authentication and authorization
+- Manages request/response lifecycle
+
+### @server/auth.ts
+- Implements authentication logic
+- Manages user sessions
+- Handles authorization middleware
+- Implements security measures
+
+### @server/db.ts
+- Database initialization and configuration
+- Connection management
+- Core database setup
+
+## Storage Layer
+
+### @server/storage.ts
+- Abstract storage interface implementation
+- Core data access methods
+- Data manipulation logic
+
+### @server/sqlite-storage.ts
+- SQLite-specific storage implementation
+- Database queries and operations
+- Data persistence logic
+
+## Development Tools
+
+### @server/vite.ts
+- Development server configuration
+- Static file serving in production
+- Hot module replacement setup
+
+## Architecture Rules
+
+1. **Database Access**
+   - All database operations MUST go through the storage interface
+   - Direct database queries should ONLY exist in storage implementation files
+   - Use type-safe queries with Drizzle ORM
+
+2. **Authentication**
+   - All protected routes MUST use authentication middleware
+   - Session management MUST be handled through auth.ts
+   - Implement role-based access control
+
+3. **API Structure**
+   - Follow RESTful principles
+   - Group related endpoints
+   - Implement proper error handling
+   - Use TypeScript types for request/response objects
+
+4. **Error Handling**
+   - Use consistent error response format
+   - Implement proper logging
+   - Handle both sync and async errors
+   - Don't expose internal errors to clients
+
+5. **Environment Configuration**
+   - Use environment variables for configuration
+   - Separate development and production settings
+   - Store sensitive data in .env files (not in version control)
+
+6. **Type Safety**
+   - Use TypeScript interfaces for all data models
+   - Maintain strict type checking
+   - Share types between frontend and backend using @shared/schema
+
+7. **Security**
+   - Implement input validation
+   - Use proper session management
+   - Encrypt sensitive data
+   - Follow security best practices
+
+## Project Features
+
+The server implements the following core features as described in the presentation:
+
+1. **Organization Management**
+   - Registration and verification workflow
+   - Member management
+   - Organization profiles
+
+2. **User Management**
+   - Authentication and authorization
+   - Profile management
+   - Role-based access
+
+3. **Commute Tracking**
+   - Log creation and management
+   - Distance calculation
+   - Transportation mode tracking
+
+4. **Carbon Credits**
+   - Credit calculation
+   - Transaction management
+   - History tracking
+
+5. **Analytics**
+   - Environmental impact tracking
+   - Organization-level reporting
+   - User statistics
+
+## Best Practices
+
+1. **Code Organization**
+   - Keep files focused and single-purpose
+   - Use clear, consistent naming conventions
+   - Maintain separation of concerns
+
+2. **Performance**
+   - Implement proper caching strategies
+   - Optimize database queries
+   - Use efficient data structures
+
+3. **Scalability**
+   - Design for horizontal scaling
+   - Implement proper connection pooling
+   - Use efficient data indexing
+
+4. **Maintenance**
+   - Write clear documentation
+   - Implement comprehensive logging
+   - Follow consistent coding standards

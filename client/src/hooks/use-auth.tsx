@@ -36,8 +36,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const res = await apiRequest("POST", "/api/login", credentials);
       return await res.json();
     },
-    onSuccess: (user: SelectUser) => {
-      queryClient.setQueryData(["/api/user"], user);
+    onSuccess: (loggedInUser: SelectUser) => {
+      queryClient.resetQueries();
+      queryClient.setQueryData(["/api/user"], loggedInUser);
     },
     onError: (error: Error) => {
       toast({
@@ -53,8 +54,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const res = await apiRequest("POST", "/api/register", credentials);
       return await res.json();
     },
-    onSuccess: (user: SelectUser) => {
-      queryClient.setQueryData(["/api/user"], user);
+    onSuccess: (registeredUser: SelectUser) => {
+      queryClient.resetQueries();
+      queryClient.setQueryData(["/api/user"], registeredUser);
     },
     onError: (error: Error) => {
       toast({
@@ -70,7 +72,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await apiRequest("POST", "/api/logout");
     },
     onSuccess: () => {
-      queryClient.setQueryData(["/api/user"], null);
+      queryClient.clear();
     },
     onError: (error: Error) => {
       toast({

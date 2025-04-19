@@ -1,0 +1,71 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# Plan: Implement Employee-Organization Enrollment Flow
+
+## 1. Problem Statement
+
+Employees can currently sign up and access features (like commute logging) without being formally associated with or approved by an organization. This prevents correct tracking of carbon credits at the organization level and bypasses the intended administrative oversight by Org Admins.
+
+## 2. Goal
+
+Modify the system so that:
+*   Employees must request to join a specific organization during or immediately after signup.
+*   Employees cannot log commutes or access certain features until their request is approved by an Org Admin of the chosen organization.
+*   Org Admins have a dedicated interface to view and manage pending employee join requests.
+*   Commute logs and associated credits are correctly linked to the employee's approved organization.
+
+## 3. Implementation Steps
+
+### 3.1. Backend Changes (`@server/`)
+
+1.  **Database Schema Adjustment (`@shared/schema`, `@server/storage.ts`, `@server/sqlite-storage.ts`):**
+    *   Introduce a status field (e.g., `pending`, `approved`, `rejected`) to the user-organization relationship table (or create a dedicated join request table). This status will track whether an employee's request to join an organization has been approved.
+    *   Update storage functions (`createMembership`, `getMembership`, etc.) to handle this new status.
+    *   Ensure database migrations are created if using an ORM that supports them.
+
+2.  **API Endpoint Modifications (`@server/routes.ts`):**
+    *   **Employee Signup/Request:** Modify the user creation or add a new endpoint for employees to *request* joining an organization. This endpoint should create the user-organization link with a `pending` status.
+    *   **List Pending Requests:** Create a new endpoint for Org Admins (e.g., `GET /api/organizations/:orgId/pending-members`) to fetch a list of users whose requests for their organization are `pending`. Ensure only authenticated Org Admins of that specific organization can access this.
+    *   **Approve/Reject Request:** Create a new endpoint (e.g., `PATCH /api/organizations/:orgId/members/:userId/status`) for Org Admins to change the status of a pending request to `approved` or `rejected`. Again, restrict access to the relevant Org Admin.
+    *   **Authorization Updates:** Modify existing endpoints (e.g., `POST /api/commutes`) to check if the requesting employee has an `approved` status with an organization before allowing the action.
+
+3.  **Authorization Logic (`@server/auth.ts`):**
+    *   Update or create middleware functions to verify not just if a user is logged in and has the 'employee' role, but also if their membership in an organization is `approved` for actions that require it (like logging commutes).
+
+### 3.2. Frontend Changes (`@client/`)
+
+1.  **Signup Flow (`@client/src/pages/auth-page.tsx`, `@client/src/components/auth/`):**
+    *   Add UI elements to the employee registration form allowing users to search for and select an organization to join.
+    *   Trigger the new backend request endpoint upon submission.
+    *   Provide feedback to the user indicating their request is pending approval.
+
+2.  **Employee Dashboard (`@client/src/pages/employee-dashboard.tsx`):**
+    *   Conditionally render components based on the user's organization membership status.
+    *   If status is `pending`, display a message indicating approval is needed and disable/hide features like the commute logging form (`@client/src/components/commute-log-form.tsx`).
+    *   If status is `rejected`, provide appropriate feedback.
+    *   If status is `approved`, enable full dashboard functionality.
+
+3.  **Org Admin Dashboard (`@client/src/pages/org-admin-dashboard.tsx`):**
+    *   Add a new section or tab (e.g., "Pending Approvals" or "Member Requests").
+    *   Fetch the list of pending members using the new backend endpoint.
+    *   Display the list of pending employees with relevant details.
+    *   Add "Approve" and "Reject" buttons for each pending request, triggering the corresponding backend status update endpoint.
+    *   Update the UI dynamically after an action is taken.
+
+### 3.3. Commute & Credit Logic (`@server/`, `@client/`)
+
+1.  **Credit Association (`@server/routes.ts`, `@server/storage.ts`):**
+    *   Verify that when a commute is successfully logged by an *approved* employee, the associated carbon credits calculation logic correctly attributes these credits to the employee's organization. This might involve fetching the user's approved organization ID when processing the commute log.
+2.  **UI Display:** Ensure relevant dashboards (`employee-dashboard.tsx`, `org-admin-dashboard.tsx`) correctly display individual and organizational credits once the association is established.
+
+## 4. Verification
+
+*   Test the signup flow for new employees, ensuring they must select an organization and see the pending status.
+*   Verify that pending employees cannot log commutes or access restricted features.
+*   Log in as an Org Admin and confirm the pending requests are visible and can be approved/rejected.
+*   After approval, confirm the employee gains full access and can log commutes.
+*   Verify that logged commutes correctly contribute to the organization's credit totals (this might require reviewing credit calculation logic and data storage).
+*   Test the rejection flow.

@@ -25,13 +25,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.status(201).json(org);
   });
 
-  app.get("/api/organizations/:id", async (req, res) => {
-    if (!req.user) return res.status(401).send("Unauthorized");
-    const org = await sqliteStorage.getOrganization(parseInt(req.params.id));
-    if (!org) return res.status(404).send("Organization not found");
-    res.json(org);
+  // Public endpoint to get approved organizations for registration
+  app.get("/api/organizations/public", async (_req, res) => {
+    const orgs = Array.from((await sqliteStorage.getAllOrganizations()).values())
+      .filter(org => org.status === "approved")
+      .map(org => ({
+        id: org.id,
+        name: org.name
+      }));
+    res.json(orgs);
   });
 
+  // Endpoint to get pending organizations for system admin
   app.get("/api/organizations/pending", async (req, res) => {
     if (!req.user || req.user.role !== "system_admin") {
       return res.status(403).send("Unauthorized");
@@ -39,6 +44,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const orgs = Array.from((await sqliteStorage.getAllOrganizations()).values())
       .filter(org => org.status === "pending");
     res.json(orgs);
+  });
+
+  app.get("/api/organizations/:id", async (req, res) => {
+    if (!req.user) return res.status(401).send("Unauthorized");
+    const org = await sqliteStorage.getOrganization(parseInt(req.params.id));
+    if (!org) return res.status(404).send("Organization not found");
+    res.json(org);
   });
 
   app.patch("/api/organizations/:id/approve", async (req, res) => {
@@ -65,14 +77,93 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json(org);
   });
 
+  // Add endpoint to get all organizations for selection during signup/request
+  app.get("/api/organizations/list", async (req, res) => {
+    if (!req.user) return res.status(401).send("Unauthorized");
+    const orgs = Array.from((await sqliteStorage.getAllOrganizations()).values())
+      .filter(org => org.status === "approved");
+    res.json(orgs);
+  });
+
+  // Get pending organization requests for an organization admin to review
+  app.get("/api/organizations/:id/pending-requests", async (req, res) => {
+    if (!req.user || req.user.role !== "org_admin" || req.user.organizationId !== parseInt(req.params.id)) {
+      return res.status(403).send("Unauthorized");
+    }
+    
+    const pendingRequests = await sqliteStorage.getPendingOrganizationRequests(parseInt(req.params.id));
+    res.json(pendingRequests);
+  });
+
+  // Request to join an organization (for employees)
+  app.post("/api/organizations/:id/request", async (req, res) => {
+    if (!req.user || req.user.role !== "employee") {
+      return res.status(403).send("Unauthorized");
+    }
+    
+    // Get the organization to verify it exists and is approved
+    const org = await sqliteStorage.getOrganization(parseInt(req.params.id));
+    if (!org) {
+      return res.status(404).send("Organization not found");
+    }
+    if (org.status !== "approved") {
+      return res.status(400).send("Cannot request to join a non-approved organization");
+    }
+    
+    // Update the user with the organization request
+    const updatedUser = await sqliteStorage.updateUser(req.user.id, {
+      organizationRequest: parseInt(req.params.id),
+      status: "pending"
+    });
+    
+    res.status(200).json(updatedUser);
+  });
+
+  // Approve an organization join request
+  app.post("/api/organizations/:orgId/requests/:userId/approve", async (req, res) => {
+    const orgId = parseInt(req.params.orgId);
+    const userId = parseInt(req.params.userId);
+    
+    if (!req.user || req.user.role !== "org_admin" || req.user.organizationId !== orgId) {
+      return res.status(403).send("Unauthorized");
+    }
+    
+    try {
+      const updatedUser = await sqliteStorage.approveOrganizationRequest(userId, orgId);
+      res.json(updatedUser);
+    } catch (error) {
+      res.status(400).send((error as Error).message);
+    }
+  });
+
+  // Reject an organization join request
+  app.post("/api/organizations/:orgId/requests/:userId/reject", async (req, res) => {
+    const orgId = parseInt(req.params.orgId);
+    const userId = parseInt(req.params.userId);
+    
+    if (!req.user || req.user.role !== "org_admin" || req.user.organizationId !== orgId) {
+      return res.status(403).send("Unauthorized");
+    }
+    
+    try {
+      const updatedUser = await sqliteStorage.rejectOrganizationRequest(userId, orgId, req.body.reason);
+      res.json(updatedUser);
+    } catch (error) {
+      res.status(400).send((error as Error).message);
+    }
+  });
 
   // Users
   app.get("/api/users/pending", async (req, res) => {
     if (!req.user || req.user.role !== "org_admin") {
       return res.status(403).send("Unauthorized");
     }
+    const orgId = req.user ? req.user.organizationId : null;
+    if (!orgId) {
+      return res.status(400).send("Admin organization not found");
+    }
     const users = Array.from((await sqliteStorage.getAllUsers()).values())
-      .filter(user => user.status === "pending" && user.organizationId === req.user.organizationId);
+      .filter(user => user.status === "pending" && user.organizationId === orgId);
     res.json(users);
   });
 
@@ -101,6 +192,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       if (!req.user || req.user.role !== "employee") {
         return res.status(403).send("Unauthorized");
+      }
+
+      // Check if user has an approved organization status
+      if (!req.user.organizationId || req.user.status !== "approved") {
+        return res.status(403).send("You must be approved by an organization before logging commutes");
       }
 
       if (!req.user.commuteDistance) {
@@ -142,10 +238,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (req.user.organizationId) {
         const org = await sqliteStorage.getOrganization(req.user.organizationId);
         if (org) {
-          const newTotal = (parseFloat(org.totalCredits) + pointsEarned).toString();
-          await sqliteStorage.updateOrganization(org.id, {
-            totalCredits: newTotal,
-          });
+          const pointsNumber = parseFloat(pointsEarned.toString());
+          const currentCredits = parseFloat(org.totalCredits);
+          const newTotal = (currentCredits + pointsNumber).toString();
+          console.log(`[Commute Log] User ${req.user.id} earned ${pointsNumber} points. Updating Org ${org.id} credits from ${currentCredits} to ${newTotal}`);
+          try {
+            await sqliteStorage.updateOrganization(org.id, {
+              totalCredits: newTotal,
+            });
+            console.log(`[Commute Log] Successfully called updateOrganization for Org ${org.id}`);
+            // Optionally, re-fetch org to confirm update immediately
+            // const updatedOrg = await sqliteStorage.getOrganization(org.id);
+            // console.log(`[Commute Log] Org ${org.id} credits after update attempt: ${updatedOrg?.totalCredits}`);
+          } catch (updateError) {
+            console.error(`[Commute Log] Error calling updateOrganization for Org ${org.id}:`, updateError);
+          }
+        } else {
+           console.log(`[Commute Log] Org not found for ID: ${req.user.organizationId}`);
         }
       }
 
@@ -384,34 +493,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Add marketplace analytics endpoint
   app.get("/api/analytics/marketplace", async (req, res) => {
-    if (!req.user || req.user.role !== "org_admin") {
-      return res.status(403).send("Unauthorized");
+    if (!req.user || req.user.role !== "org_admin" || !req.user.organizationId) {
+      return res.status(403).send("Unauthorized or missing organization ID");
     }
+    
+    const orgId = req.user.organizationId;
 
-    const listings = await sqliteStorage.getActiveListings();
-
-    // Filter listings for the organization
-    const orgListings = listings.filter(
-      listing => listing.organizationId === req.user!.organizationId
+    // Get ACTIVE listings CREATED BY this organization
+    const allActiveListings = await sqliteStorage.getActiveListings();
+    const activeListings = allActiveListings.filter(
+      listing => listing.organizationId === orgId
     );
 
-    const soldListings = orgListings.filter(listing => listing.status === "sold");
-    const activeListings = orgListings.filter(listing => listing.status === "active");
-
-    // Calculate trends
+    // Get SOLD listings CREATED BY this organization using the new method
+    const soldListings = await sqliteStorage.getSoldListingsByOrg(orgId);
+    
+    // Calculate trends based on actual sold listings
     const salesTrend = soldListings.reduce((acc, listing) => {
-      const month = new Date(listing.createdAt).toISOString().slice(0, 7); // YYYY-MM
-      const amount = parseFloat(listing.creditsAmount);
-      const value = amount * parseFloat(listing.pricePerCredit);
+      // Ensure createdAt is valid before processing
+      if (!listing.createdAt) return acc;
+      try {
+        const month = new Date(listing.createdAt).toISOString().slice(0, 7); // YYYY-MM
+        const amount = parseFloat(listing.creditsAmount);
+        const value = amount * parseFloat(listing.pricePerCredit);
 
-      acc[month] = acc[month] || { credits: 0, value: 0 };
-      acc[month].credits += amount;
-      acc[month].value += value;
-
+        acc[month] = acc[month] || { credits: 0, value: 0 };
+        acc[month].credits += amount;
+        acc[month].value += value;
+      } catch (e) {
+        console.error(`[Analytics/Marketplace] Error processing date for listing ${listing.id}:`, listing.createdAt, e);
+      }
       return acc;
     }, {} as Record<string, { credits: number; value: number }>);
 
-    // Calculate price trends
+    // Calculate price trends based on actual sold listings
     const priceAnalysis = soldListings.reduce((acc, listing) => {
       const price = parseFloat(listing.pricePerCredit);
       if (!acc.min || price < acc.min) acc.min = price;
@@ -451,7 +566,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     const users = Array.from((await sqliteStorage.getAllUsers()).values());
     const organizations = Array.from((await sqliteStorage.getAllOrganizations()).values());
-    const listings = await sqliteStorage.getActiveListings();
+    // Fetch ALL listings initially is not efficient if only need active/sold
+    // const listings = await sqliteStorage.getActiveListings(); 
+    
+    // Fetch active and sold listings separately
+    const activeListings = await sqliteStorage.getActiveListings();
+    const soldListings = await sqliteStorage.getAllSoldListings(); // Use the correct method
 
     // Helper function to safely get month string
     const getMonthString = (date: Date | string | null | undefined): string => {
@@ -481,8 +601,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return acc;
     }, {} as Record<string, number>);
 
-    // Calculate trading activity
-    const soldListings = listings.filter(listing => listing.status === "sold");
+    // Calculate trading activity based on actual sold listings
+    // const soldListings = listings.filter(listing => listing.status === "sold"); // Remove old filter
     const tradingActivity = soldListings.reduce((acc, listing) => {
       const month = getMonthString(listing.createdAt);
       if (month !== 'unknown') {
@@ -497,6 +617,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }, {} as Record<string, { credits: number; volume: number }>);
 
     // Get all commute logs
+    // ... (commute log fetching remains the same) ...
     const allLogs = await Promise.all(
       users.map(user => sqliteStorage.getUserCommuteLogs(user.id))
     );
@@ -509,12 +630,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json({
       totalOrganizations: organizations.length,
       totalUsers: users.length,
+      // Use the correct soldListings array for these stats
       totalCreditsTraded: soldListings.reduce((sum, l) => sum + parseFloat(l.creditsAmount), 0),
       totalTradingVolume: soldListings.reduce((sum, l) => 
         sum + (parseFloat(l.creditsAmount) * parseFloat(l.pricePerCredit)), 0),
       userGrowth,
       organizationGrowth,
       tradingActivity,
+      // ... (userDistribution remains the same) ...
       userDistribution: {
         employees: users.filter(u => u.role === "employee").length,
         orgAdmins: users.filter(u => u.role === "org_admin").length,
@@ -523,10 +646,120 @@ export async function registerRoutes(app: Express): Promise<Server> {
       platformStats: {
         totalCommutes,
         avgPointsPerCommute: totalCommutes ? totalPoints / totalCommutes : 0,
-        activeListings: listings.filter(l => l.status === "active").length,
-        completedTrades: soldListings.length
+        // Use the correct activeListings array here
+        activeListings: activeListings.length, 
+        // Use the correct soldListings array here
+        completedTrades: soldListings.length 
       }
     });
+  });
+
+  // TEMPORARY DEV ENDPOINT: Approve all organizations
+  app.get("/api/dev/approve-all-orgs", async (_req, res) => {
+    const organizations = await sqliteStorage.getAllOrganizations();
+    const orgArray = Array.from(organizations.entries());
+    
+    for (const [id, org] of orgArray) {
+      if (org.status === "pending") {
+        await sqliteStorage.updateOrganization(id, { status: "approved" });
+      }
+    }
+    
+    res.json({ message: "All pending organizations have been approved." });
+  });
+
+  // TEMPORARY DEV ENDPOINT: Create a test pending organization
+  app.get("/api/dev/create-test-org", async (_req, res) => {
+    const testOrg = await sqliteStorage.createOrganization({
+      name: "Test Pending Organization " + new Date().toISOString().slice(0, 16),
+      description: "This is a test organization created for development purposes",
+      address: "123 Test Street, Test City",
+      status: "pending"
+    });
+    
+    res.json({ 
+      message: "Test organization created with pending status", 
+      organization: testOrg 
+    });
+  });
+
+  // TEMPORARY DEV ENDPOINT: Check pending organization requests
+  app.get("/api/dev/check-pending-requests", async (_req, res) => {
+    const organizations = await sqliteStorage.getAllOrganizations();
+    const users = await sqliteStorage.getAllUsers();
+    
+    const userArray = Array.from(users.values());
+    const orgArray = Array.from(organizations.entries());
+    
+    const pendingRequests = [];
+    
+    for (const user of userArray) {
+      if (user.status === "pending" && user.organizationRequest) {
+        const org = organizations.get(user.organizationRequest);
+        pendingRequests.push({
+          userId: user.id,
+          userName: user.name,
+          userStatus: user.status,
+          organizationRequest: user.organizationRequest,
+          organizationName: org ? org.name : "Unknown Organization"
+        });
+      }
+    }
+    
+    res.json({
+      pendingRequestsCount: pendingRequests.length,
+      pendingRequests: pendingRequests,
+      userCount: userArray.length,
+      organizationCount: orgArray.length
+    });
+  });
+
+  // TEMPORARY DEV ENDPOINT: Backfill createdAt for existing users/orgs
+  app.get("/api/dev/backfill-createdat", async (req, res) => {
+    if (!req.user || req.user.role !== "system_admin") {
+      return res.status(403).send("Unauthorized");
+    }
+
+    let usersUpdated = 0;
+    let orgsUpdated = 0;
+    const now = new Date().toISOString();
+
+    try {
+      console.log("[DEV] Starting createdAt backfill...");
+      const usersMap = await sqliteStorage.getAllUsers();
+      const organizationsMap = await sqliteStorage.getAllOrganizations();
+
+      // Update users - Use forEach
+      console.log(`[DEV] Checking ${usersMap.size} users...`);
+      await Promise.all(Array.from(usersMap.entries()).map(async ([id, user]) => {
+        if (!user.createdAt) {
+          console.log(`[DEV] Updating createdAt for user ID: ${id}`);
+          await sqliteStorage.updateUser(id, { createdAt: now });
+          usersUpdated++;
+        }
+      }));
+
+      // Update organizations - Use forEach
+      console.log(`[DEV] Checking ${organizationsMap.size} organizations...`);
+      await Promise.all(Array.from(organizationsMap.entries()).map(async ([id, org]) => {
+        if (!org.createdAt) {
+          console.log(`[DEV] Updating createdAt for organization ID: ${id}`);
+          await sqliteStorage.updateOrganization(id, { createdAt: now });
+          orgsUpdated++;
+        }
+      }));
+      
+      console.log("[DEV] Backfill complete.");
+      res.json({ 
+        message: "Backfill complete.", 
+        usersUpdated, 
+        orgsUpdated 
+      });
+
+    } catch (error) {
+      console.error("[DEV] Error during createdAt backfill:", error);
+      res.status(500).json({ message: "Error during backfill", error: (error as Error).message });
+    }
   });
 
   const httpServer = createServer(app);

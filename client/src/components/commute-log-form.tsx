@@ -20,14 +20,17 @@ const formSchema = z.object({
   method: z.enum(["drove_alone", "public_transport", "carpool", "work_from_home"]),
 });
 
+// Define the default values matching the schema type
+const defaultFormValues: z.infer<typeof formSchema> = {
+  date: new Date(),
+  method: "drove_alone",
+};
+
 export function CommuteLogForm() {
   const { toast } = useToast();
   const form = useForm({
     resolver: zodResolver(formSchema),
-    defaultValues: {
-      date: new Date(),
-      method: "drove_alone",
-    },
+    defaultValues: defaultFormValues,
   });
 
   const createLogMutation = useMutation({
@@ -42,11 +45,8 @@ export function CommuteLogForm() {
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/commute-logs"] });
-      form.reset({
-        date: new Date(),
-        method: "drove_alone",
-      });
+      queryClient.invalidateQueries({ queryKey: ["/api/commute-logs/analytics"] });
+      form.reset(defaultFormValues);
       toast({
         title: "Success",
         description: "Commute logged successfully",
